@@ -50,6 +50,12 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
   const [isPulling, setIsPulling] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
+  React.useEffect(() => {
+    if (config.webAppUrl && config.webAppUrl !== urlInput) {
+      setUrlInput(config.webAppUrl);
+    }
+  }, [config.webAppUrl]);
+
   const handleCopyCode = () => {
     navigator.clipboard.writeText(googleAppsScriptTemplate);
     setCopiedCode(true);

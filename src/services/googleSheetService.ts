@@ -1,5 +1,7 @@
 import { Student, Course, StudentAttendanceMap, StudentGrade, ScheduleItem } from '../types';
 
+export const DEFAULT_GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz-Si-yDWV9ygSOmo-wNsHK6XGoUZterlBkkE9ecjXEM2qt7TBQqBvwIAtg3F2JVuki/exec';
+
 export interface SyncPayload {
   students: Student[];
   courses: Course[];

@@ -22,7 +22,11 @@ import {
   demoSchedules
 } from './data/initialData';
 import { calculateAttendanceSummary } from './utils/calculations';
-import { pushDataToGoogleSheets, fetchDataFromGoogleSheets } from './services/googleSheetService';
+import { 
+  pushDataToGoogleSheets, 
+  fetchDataFromGoogleSheets, 
+  DEFAULT_GOOGLE_APPS_SCRIPT_URL 
+} from './services/googleSheetService';
 
 // Components
 import { Navbar } from './components/Navbar';
@@ -72,16 +76,24 @@ export default function App() {
 
   const [googleConfig, setGoogleConfig] = useState<GoogleSheetsSyncConfig>(() => {
     const saved = localStorage.getItem('siakad_google_config');
-    return saved
-      ? JSON.parse(saved)
-      : {
-          webAppUrl: '',
-          sheetId: '',
-          sheetName: 'RekapPerkuliahan',
-          lastSyncedAt: null,
-          autoSync: true,
-          status: 'idle',
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          webAppUrl: parsed.webAppUrl && parsed.webAppUrl.trim() !== '' ? parsed.webAppUrl : DEFAULT_GOOGLE_APPS_SCRIPT_URL,
+          status: parsed.status === 'error' ? 'idle' : parsed.status || 'success',
         };
+      } catch (e) {}
+    }
+    return {
+      webAppUrl: DEFAULT_GOOGLE_APPS_SCRIPT_URL,
+      sheetId: '',
+      sheetName: 'RekapPerkuliahan',
+      lastSyncedAt: null,
+      autoSync: true,
+      status: 'idle',
+    };
   });
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'grades' | 'schedule' | 'warning' | 'googlesheets' | 'report'>('dashboard');
@@ -95,6 +107,57 @@ export default function App() {
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Auto-Fetch data from Google Sheets on application initial load
+  useEffect(() => {
+    const targetUrl = googleConfig.webAppUrl || DEFAULT_GOOGLE_APPS_SCRIPT_URL;
+    if (targetUrl && targetUrl.startsWith('http')) {
+      fetchDataFromGoogleSheets(targetUrl)
+        .then((result) => {
+          if (result.success && result.data) {
+            // Only overwrite if Sheets returned valid data structure
+            if (result.data.students) {
+              setStudents(result.data.students);
+            }
+            if (result.data.courses && result.data.courses.length > 0) {
+              setCourses(result.data.courses);
+              setSelectedCourseId((prev) => {
+                const exists = result.data?.courses.some((c) => c.id === prev);
+                return exists ? prev : result.data?.courses[0].id || prev;
+              });
+            }
+            if (result.data.attendanceMap) {
+              setAttendanceMap(result.data.attendanceMap);
+            }
+            if (result.data.grades) {
+              setGrades(result.data.grades);
+            }
+            if (result.data.schedules && result.data.schedules.length > 0) {
+              setSchedules(result.data.schedules);
+            }
+
+            const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            setGoogleConfig((prev) => ({
+              ...prev,
+              webAppUrl: targetUrl,
+              status: 'success',
+              lastSyncedAt: timeStr,
+              errorMessage: undefined,
+            }));
+          } else {
+            // Mark as connected ready
+            setGoogleConfig((prev) => ({
+              ...prev,
+              webAppUrl: targetUrl,
+              status: 'success',
+            }));
+          }
+        })
+        .catch((err) => {
+          console.log('Initial Google Sheets sync check:', err);
+        });
+    }
+  }, []);
 
   // Save to LocalStorage on Changes
   useEffect(() => {
