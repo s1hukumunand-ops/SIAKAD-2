@@ -14,10 +14,15 @@ import {
   initialCourses, 
   initialAttendanceMap, 
   initialGrades, 
-  initialSchedules 
+  initialSchedules,
+  demoStudents,
+  demoCourses,
+  demoAttendanceMap,
+  demoGrades,
+  demoSchedules
 } from './data/initialData';
 import { calculateAttendanceSummary } from './utils/calculations';
-import { pushDataToGoogleSheets } from './services/googleSheetService';
+import { pushDataToGoogleSheets, fetchDataFromGoogleSheets } from './services/googleSheetService';
 
 // Components
 import { Navbar } from './components/Navbar';
@@ -269,6 +274,31 @@ export default function App() {
     setSchedules((prev) => prev.filter((s) => s.id !== id));
   };
 
+  // Pull Data from Google Sheets
+  const handlePullDataFromSheets = async (url: string) => {
+    const result = await fetchDataFromGoogleSheets(url);
+    if (result.success && result.data) {
+      setStudents(result.data.students || []);
+      if (result.data.courses && result.data.courses.length > 0) {
+        setCourses(result.data.courses);
+        setSelectedCourseId(result.data.courses[0].id);
+      }
+      setAttendanceMap(result.data.attendanceMap || {});
+      setGrades(result.data.grades || {});
+      setSchedules(result.data.schedules || []);
+      const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      setGoogleConfig((prev) => ({
+        ...prev,
+        webAppUrl: url,
+        status: 'success',
+        lastSyncedAt: timeStr,
+        errorMessage: undefined,
+      }));
+    } else {
+      throw new Error(result.message);
+    }
+  };
+
   // Google Sheets Quick Sync
   const handleQuickSync = async () => {
     if (!googleConfig.webAppUrl) {
@@ -352,12 +382,12 @@ export default function App() {
   };
 
   const handleRestoreDemoData = () => {
-    setStudents(initialStudents);
-    setCourses(initialCourses);
-    setAttendanceMap(initialAttendanceMap);
-    setGrades(initialGrades);
-    setSchedules(initialSchedules);
-    setSelectedCourseId(initialCourses[0].id);
+    setStudents(demoStudents);
+    setCourses(demoCourses);
+    setAttendanceMap(demoAttendanceMap);
+    setGrades(demoGrades);
+    setSchedules(demoSchedules);
+    setSelectedCourseId(demoCourses[0].id);
   };
 
   // Import JSON backup
@@ -468,6 +498,7 @@ export default function App() {
             grades={grades}
             schedules={schedules}
             onImportData={handleImportBackupData}
+            onPullDataFromSheets={handlePullDataFromSheets}
           />
         )}
       </main>

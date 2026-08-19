@@ -29,6 +29,7 @@ interface GoogleSheetIntegrationTabProps {
   grades: Record<string, Record<string, StudentGrade>>;
   schedules: ScheduleItem[];
   onImportData: (data: any) => void;
+  onPullDataFromSheets: (url: string) => Promise<void>;
 }
 
 export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps> = ({
@@ -40,11 +41,13 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
   grades,
   schedules,
   onImportData,
+  onPullDataFromSheets,
 }) => {
   const [urlInput, setUrlInput] = useState(config.webAppUrl);
   const [copiedCode, setCopiedCode] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   const handleCopyCode = () => {
@@ -72,6 +75,25 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
     } else {
       setFeedback({ type: 'error', message: result.message });
       onUpdateConfig({ status: 'error', errorMessage: result.message });
+    }
+  };
+
+  const handlePullNow = async () => {
+    if (!urlInput.trim()) {
+      setFeedback({ type: 'error', message: 'Masukkan URL Google Apps Script terlebih dahulu.' });
+      return;
+    }
+
+    setIsPulling(true);
+    setFeedback(null);
+
+    try {
+      await onPullDataFromSheets(urlInput.trim());
+      setFeedback({ type: 'success', message: 'Data terbaru berhasil dimuat & disinkronkan dari Google Sheets!' });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Gagal menarik data dari Google Sheets.' });
+    } finally {
+      setIsPulling(false);
     }
   };
 
@@ -253,20 +275,32 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
                   id="test-connection-btn"
                   onClick={handleTestConnection}
                   disabled={isTesting}
-                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition shadow-xs whitespace-nowrap"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition shadow-xs whitespace-nowrap"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin text-blue-400' : ''}`} />
                   <span>{isTesting ? 'Menguji...' : 'Uji Koneksi'}</span>
                 </button>
 
                 <button
+                  id="pull-from-sheets-btn"
+                  onClick={handlePullNow}
+                  disabled={isPulling}
+                  title="Tarik & perbarui data dari Google Sheets"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition shadow-sm whitespace-nowrap"
+                >
+                  <Download className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
+                  <span>{isPulling ? 'Menarik Data...' : 'Tarik Data dari Sheets'}</span>
+                </button>
+
+                <button
                   id="sync-now-btn"
                   onClick={handleSyncNow}
                   disabled={isSyncing}
-                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition shadow-sm whitespace-nowrap"
+                  title="Kirim & timpa data ke Google Sheets"
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition shadow-sm whitespace-nowrap"
                 >
                   <Cloud className={`w-3.5 h-3.5 ${isSyncing ? 'animate-bounce' : ''}`} />
-                  <span>{isSyncing ? 'Menyimpan...' : 'Sinkronkan Data'}</span>
+                  <span>{isSyncing ? 'Menyimpan...' : 'Kirim ke Sheets'}</span>
                 </button>
               </div>
             </div>

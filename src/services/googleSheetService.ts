@@ -47,6 +47,83 @@ export async function testAppsScriptConnection(url: string): Promise<{ success: 
   }
 }
 
+export async function fetchDataFromGoogleSheets(url: string): Promise<{
+  success: boolean;
+  message: string;
+  data?: {
+    students: Student[];
+    courses: Course[];
+    attendanceMap: StudentAttendanceMap;
+    grades: Record<string, Record<string, StudentGrade>>;
+    schedules: ScheduleItem[];
+  };
+}> {
+  if (!url || !url.trim().startsWith('http')) {
+    return { success: false, message: 'URL Google Apps Script belum diisi.' };
+  }
+
+  try {
+    const fetchUrl = `${url.trim()}${url.includes('?') ? '&' : '?'}action=getAll&t=${Date.now()}`;
+    const response = await fetch(fetchUrl, {
+      method: 'GET',
+      mode: 'cors',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP Error status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.status === 'success') {
+      const students: Student[] = result.students || [];
+      const courses: Course[] = result.courses || [];
+      const schedules: ScheduleItem[] = result.schedules || [];
+
+      // Reconstruct attendanceMap from flattened array if needed
+      const attendanceMap: StudentAttendanceMap = {};
+      if (Array.isArray(result.attendance)) {
+        result.attendance.forEach((item: any) => {
+          if (item.courseId && item.studentId) {
+            if (!attendanceMap[item.courseId]) attendanceMap[item.courseId] = {};
+            attendanceMap[item.courseId][item.studentId] = item.records || {};
+          }
+        });
+      }
+
+      // Reconstruct grades map
+      const grades: Record<string, Record<string, StudentGrade>> = {};
+      if (Array.isArray(result.grades)) {
+        result.grades.forEach((grade: StudentGrade) => {
+          if (grade.courseId && grade.studentId) {
+            if (!grades[grade.courseId]) grades[grade.courseId] = {};
+            grades[grade.courseId][grade.studentId] = grade;
+          }
+        });
+      }
+
+      return {
+        success: true,
+        message: 'Data berhasil ditarik dari Google Sheets!',
+        data: {
+          students,
+          courses,
+          attendanceMap,
+          grades,
+          schedules,
+        }
+      };
+    }
+
+    return { success: false, message: result.message || 'Gagal memuat data dari Google Sheets.' };
+  } catch (error: any) {
+    console.error('Error fetching from Google Sheets:', error);
+    return {
+      success: false,
+      message: `Gagal memuat data dari Google Sheets: ${error?.message || 'Periksa koneksi atau URL Apps Script'}`
+    };
+  }
+}
+
 export async function pushDataToGoogleSheets(
   url: string,
   payload: {

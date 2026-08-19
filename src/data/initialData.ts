@@ -1,6 +1,49 @@
 import { Student, Course, StudentAttendanceMap, StudentGrade, ScheduleItem } from '../types';
 
-export const initialStudents: Student[] = [
+// Clean Default Initial State
+export const initialStudents: Student[] = [];
+
+export const initialCourses: Course[] = [
+  {
+    id: 'crs-1',
+    kode: 'HKM-101',
+    nama: 'Hukum Tata Negara & Konstitusi',
+    sks: 3,
+    semester: 'Semester Ganjil 2024/2025',
+    kelas: 'Kelas A',
+    dosenPengampu: 'Dosen Pengampu',
+    nipDosen: '-',
+    ruangan: 'Ruang Kuliah',
+    jadwalHari: 'Senin',
+    jamMulai: '08:00',
+    jamSelesai: '10:30',
+    minAttendancePercent: 75,
+    gradeWeights: {
+      kehadiran: 10,
+      tugas: 20,
+      kuis: 10,
+      uts: 30,
+      uas: 30,
+    },
+    meetings: Array.from({ length: 14 }, (_, i) => ({
+      meetingNumber: i + 1,
+      date: '',
+      topic: i === 7 ? 'Pelaksanaan Ujian Tengah Semester (UTS)' : `Pokok Bahasan Pertemuan ${i + 1}`,
+      mode: 'Tatap Muka',
+      dosenHadir: true,
+      isCompleted: false,
+    })),
+  }
+];
+
+export const initialAttendanceMap: StudentAttendanceMap = {};
+
+export const initialGrades: Record<string, Record<string, StudentGrade>> = {};
+
+export const initialSchedules: ScheduleItem[] = [];
+
+// Demo / Simulation Data (For Restore Demo Data feature)
+export const demoStudents: Student[] = [
   {
     id: 'std-1',
     nim: '2110112001',
@@ -123,7 +166,7 @@ export const initialStudents: Student[] = [
   }
 ];
 
-export const initialCourses: Course[] = [
+export const demoCourses: Course[] = [
   {
     id: 'crs-1',
     kode: 'HKM-301',
@@ -225,7 +268,7 @@ export const initialCourses: Course[] = [
 ];
 
 // Pre-fill realistic attendance map for course crs-1 across 14 meetings
-export const initialAttendanceMap: StudentAttendanceMap = {
+export const demoAttendanceMap: StudentAttendanceMap = {
   'crs-1': {
     // Ahmad Fauzi: Perfect attendance
     'std-1': { 1: 'H', 2: 'H', 3: 'H', 4: 'H', 5: 'H', 6: 'H', 7: 'H', 8: 'H', 9: 'H', 10: 'H', 11: 'H', 12: 'H', 13: 'H', 14: 'H' },
@@ -254,7 +297,7 @@ export const initialAttendanceMap: StudentAttendanceMap = {
   }
 };
 
-export const initialGrades: Record<string, Record<string, StudentGrade>> = {
+export const demoGrades: Record<string, Record<string, StudentGrade>> = {
   // courseId -> studentId -> Grade
   'crs-1': {
     'std-1': { studentId: 'std-1', courseId: 'crs-1', tugas: 88, kuis: 90, uts: 85, uas: 92, catatan: 'Sangat aktif dalam diskusi' },
@@ -272,7 +315,7 @@ export const initialGrades: Record<string, Record<string, StudentGrade>> = {
   }
 };
 
-export const initialSchedules: ScheduleItem[] = [
+export const demoSchedules: ScheduleItem[] = [
   {
     id: 'sch-1',
     courseId: 'crs-1',
@@ -467,8 +510,9 @@ function getSheetDataAsJson(sheet) {
 }
 
 function saveJsonToSheet(sheet, items) {
-  if (!sheet || !items || items.length === 0) return;
+  if (!sheet) return;
   sheet.clear();
+  if (!items || items.length === 0) return;
   
   const headers = Object.keys(items[0]);
   const rows = [headers];
