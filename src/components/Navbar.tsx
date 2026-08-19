@@ -12,7 +12,8 @@ import {
   Plus, 
   BookOpen,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -24,6 +25,7 @@ interface NavbarProps {
   warningCount: number;
   onOpenAddCourse: () => void;
   onOpenAddStudent: () => void;
+  onOpenResetData: () => void;
   isSyncing: boolean;
   onQuickSync: () => void;
   googleSheetConnected: boolean;
@@ -38,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   warningCount,
   onOpenAddCourse,
   onOpenAddStudent,
+  onOpenResetData,
   isSyncing,
   onQuickSync,
   googleSheetConnected,
@@ -144,6 +147,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Mata Kuliah</span>
+            </button>
+
+            {/* Reset / Clean Data Button */}
+            <button
+              id="reset-data-nav-btn"
+              onClick={onOpenResetData}
+              title="Bersihkan data / Reset untuk mulai dari awal"
+              className="flex items-center gap-1.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 text-xs px-2.5 py-2 rounded-lg transition font-medium"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Bersihkan Data</span>
             </button>
           </div>
 

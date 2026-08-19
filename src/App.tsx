@@ -31,6 +31,7 @@ import { ReportExportModal } from './components/ReportExportModal';
 import { StudentModal } from './components/StudentModal';
 import { CourseModal } from './components/CourseModal';
 import { MeetingEditModal } from './components/MeetingEditModal';
+import { ResetDataModal } from './components/ResetDataModal';
 
 export default function App() {
   // State Initialization with LocalStorage Persistence
@@ -84,6 +85,7 @@ export default function App() {
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<MeetingInfo | null>(null);
 
   // Sync state
@@ -300,6 +302,64 @@ export default function App() {
     }
   };
 
+  // Reset & Clear Data Handlers
+  const handleClearAllData = () => {
+    // 1. Kosongkan Mahasiswa, Absensi, Nilai, dan Jadwal
+    setStudents([]);
+    setAttendanceMap({});
+    setGrades({});
+    setSchedules([]);
+
+    // 2. Sediakan 1 template mata kuliah kosong bersih
+    const cleanCourse: Course = {
+      id: `crs-${Date.now()}`,
+      kode: 'HKM-101',
+      nama: 'Mata Kuliah Baru',
+      sks: 3,
+      semester: 'Semester Ganjil 2024/2025',
+      kelas: 'Kelas A',
+      dosenPengampu: 'Nama Dosen Pengampu',
+      nipDosen: '-',
+      ruangan: 'Ruang Kuliah',
+      jadwalHari: 'Senin',
+      jamMulai: '08:00',
+      jamSelesai: '10:30',
+      minAttendancePercent: 75,
+      gradeWeights: {
+        kehadiran: 10,
+        tugas: 20,
+        kuis: 10,
+        uts: 30,
+        uas: 30,
+      },
+      meetings: Array.from({ length: 14 }, (_, i) => ({
+        meetingNumber: i + 1,
+        date: '',
+        topic: i === 7 ? 'Pelaksanaan Ujian Tengah Semester (UTS)' : `Pokok Bahasan Pertemuan ${i + 1}`,
+        mode: 'Tatap Muka',
+        dosenHadir: true,
+        isCompleted: false,
+      })),
+    };
+
+    setCourses([cleanCourse]);
+    setSelectedCourseId(cleanCourse.id);
+  };
+
+  const handleResetAttendanceAndGradesOnly = () => {
+    setAttendanceMap({});
+    setGrades({});
+  };
+
+  const handleRestoreDemoData = () => {
+    setStudents(initialStudents);
+    setCourses(initialCourses);
+    setAttendanceMap(initialAttendanceMap);
+    setGrades(initialGrades);
+    setSchedules(initialSchedules);
+    setSelectedCourseId(initialCourses[0].id);
+  };
+
   // Import JSON backup
   const handleImportBackupData = (imported: any) => {
     if (imported.students) setStudents(imported.students);
@@ -331,6 +391,7 @@ export default function App() {
         warningCount={warningCount}
         onOpenAddCourse={() => setShowAddCourseModal(true)}
         onOpenAddStudent={() => setShowAddStudentModal(true)}
+        onOpenResetData={() => setShowResetModal(true)}
         isSyncing={isSyncing}
         onQuickSync={handleQuickSync}
         googleSheetConnected={googleConfig.status === 'success'}
@@ -438,6 +499,14 @@ export default function App() {
         meeting={editingMeeting}
         onClose={() => setEditingMeeting(null)}
         onSave={handleSaveMeeting}
+      />
+
+      <ResetDataModal
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        onClearAllData={handleClearAllData}
+        onResetAttendanceAndGradesOnly={handleResetAttendanceAndGradesOnly}
+        onRestoreDemoData={handleRestoreDemoData}
       />
 
       {/* Footer */}
