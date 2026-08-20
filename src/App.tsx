@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Course, 
   Student, 
@@ -41,6 +41,7 @@ import { StudentModal } from './components/StudentModal';
 import { CourseModal } from './components/CourseModal';
 import { MeetingEditModal } from './components/MeetingEditModal';
 import { ResetDataModal } from './components/ResetDataModal';
+import { CheckCircle2, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function App() {
   // State Initialization with LocalStorage Persistence
@@ -105,8 +106,82 @@ export default function App() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<MeetingInfo | null>(null);
 
-  // Sync state
+  // Sync state & Notification toast
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState<{ show: boolean; message: string; type: 'success' | 'info' | 'error' }>({
+    show: false,
+    message: '',
+    type: 'success',
+  });
+
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showSyncNotification = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setSyncToast({ show: true, message, type });
+    toastTimerRef.current = setTimeout(() => {
+      setSyncToast((prev) => ({ ...prev, show: false }));
+    }, 3000);
+  };
+
+  // Push latest state to Google Sheets immediately
+  const pushCurrentStateToSheets = async (overrides?: {
+    students?: Student[];
+    courses?: Course[];
+    attendanceMap?: StudentAttendanceMap;
+    grades?: Record<string, Record<string, StudentGrade>>;
+    schedules?: ScheduleItem[];
+  }) => {
+    const targetUrl = googleConfig.webAppUrl || DEFAULT_GOOGLE_APPS_SCRIPT_URL;
+    if (!targetUrl || !targetUrl.startsWith('http')) return;
+
+    setIsSyncing(true);
+    try {
+      const result = await pushDataToGoogleSheets(targetUrl, {
+        students: overrides?.students ?? students,
+        courses: overrides?.courses ?? courses,
+        attendanceMap: overrides?.attendanceMap ?? attendanceMap,
+        grades: overrides?.grades ?? grades,
+        schedules: overrides?.schedules ?? schedules,
+      });
+
+      setIsSyncing(false);
+      if (result.success) {
+        const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        setGoogleConfig((prev) => ({
+          ...prev,
+          status: 'success',
+          lastSyncedAt: timeStr,
+          errorMessage: undefined,
+        }));
+        showSyncNotification('Tersimpan di Google Sheets ✓', 'success');
+      } else {
+        setGoogleConfig((prev) => ({
+          ...prev,
+          status: 'error',
+          errorMessage: result.message,
+        }));
+      }
+    } catch (err: any) {
+      setIsSyncing(false);
+      console.warn('Auto sync error:', err);
+    }
+  };
+
+  // Debounced auto-sync for frequent edits (like attendance checkboxes and grade inputs)
+  const debouncedSync = (overrides?: {
+    students?: Student[];
+    courses?: Course[];
+    attendanceMap?: StudentAttendanceMap;
+    grades?: Record<string, Record<string, StudentGrade>>;
+    schedules?: ScheduleItem[];
+  }) => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      pushCurrentStateToSheets(overrides);
+    }, 800);
+  };
 
   // Auto-Fetch data from Google Sheets on application initial load
   useEffect(() => {
@@ -115,25 +190,46 @@ export default function App() {
       fetchDataFromGoogleSheets(targetUrl)
         .then((result) => {
           if (result.success && result.data) {
-            // Only overwrite if Sheets returned valid data structure
-            if (result.data.students) {
-              setStudents(result.data.students);
-            }
-            if (result.data.courses && result.data.courses.length > 0) {
-              setCourses(result.data.courses);
-              setSelectedCourseId((prev) => {
-                const exists = result.data?.courses.some((c) => c.id === prev);
-                return exists ? prev : result.data?.courses[0].id || prev;
-              });
-            }
-            if (result.data.attendanceMap) {
-              setAttendanceMap(result.data.attendanceMap);
-            }
-            if (result.data.grades) {
-              setGrades(result.data.grades);
-            }
-            if (result.data.schedules && result.data.schedules.length > 0) {
-              setSchedules(result.data.schedules);
+            const hasRemoteData = 
+              (result.data.students && result.data.students.length > 0) ||
+              (result.data.schedules && result.data.schedules.length > 0) ||
+              (result.data.courses && result.data.courses.length > 0);
+
+            if (hasRemoteData) {
+              if (result.data.students) {
+                setStudents(result.data.students);
+              }
+              if (result.data.courses && result.data.courses.length > 0) {
+                setCourses(result.data.courses);
+                setSelectedCourseId((prev) => {
+                  const exists = result.data?.courses.some((c) => c.id === prev);
+                  return exists ? prev : result.data?.courses[0].id || prev;
+                });
+              }
+              if (result.data.attendanceMap) {
+                setAttendanceMap(result.data.attendanceMap);
+              }
+              if (result.data.grades) {
+                setGrades(result.data.grades);
+              }
+              if (result.data.schedules && result.data.schedules.length > 0) {
+                setSchedules(result.data.schedules);
+              }
+            } else {
+              // If Sheets is empty, check if we have local student or schedule data to seed
+              const savedStudents = localStorage.getItem('siakad_students');
+              const savedSchedules = localStorage.getItem('siakad_schedules');
+              const localStudents = savedStudents ? JSON.parse(savedStudents) : [];
+              const localSchedules = savedSchedules ? JSON.parse(savedSchedules) : [];
+              if (localStudents.length > 0 || localSchedules.length > 0) {
+                pushDataToGoogleSheets(targetUrl, {
+                  students: localStudents,
+                  courses,
+                  attendanceMap,
+                  grades,
+                  schedules: localSchedules,
+                });
+              }
             }
 
             const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -145,7 +241,6 @@ export default function App() {
               errorMessage: undefined,
             }));
           } else {
-            // Mark as connected ready
             setGoogleConfig((prev) => ({
               ...prev,
               webAppUrl: targetUrl,
@@ -204,137 +299,151 @@ export default function App() {
   const handleUpdateAttendance = (studentId: string, meetingNum: number, status: AttendanceStatus) => {
     if (!currentCourse) return;
 
-    setAttendanceMap((prev) => {
-      const courseAtt = { ...(prev[currentCourse.id] || {}) };
-      const studentRecs = { ...(courseAtt[studentId] || {}) };
+    const courseAtt = { ...(attendanceMap[currentCourse.id] || {}) };
+    const studentRecs = { ...(courseAtt[studentId] || {}) };
 
-      if (status === null) {
-        delete studentRecs[meetingNum];
-      } else {
-        studentRecs[meetingNum] = status;
-      }
+    if (status === null) {
+      delete studentRecs[meetingNum];
+    } else {
+      studentRecs[meetingNum] = status;
+    }
 
-      courseAtt[studentId] = studentRecs;
-      return {
-        ...prev,
-        [currentCourse.id]: courseAtt,
-      };
-    });
+    courseAtt[studentId] = studentRecs;
+    const updatedMap = {
+      ...attendanceMap,
+      [currentCourse.id]: courseAtt,
+    };
+
+    setAttendanceMap(updatedMap);
+    debouncedSync({ attendanceMap: updatedMap });
   };
 
   const handleBulkUpdateAttendance = (meetingNum: number, status: AttendanceStatus) => {
     if (!currentCourse) return;
 
-    setAttendanceMap((prev) => {
-      const courseAtt = { ...(prev[currentCourse.id] || {}) };
+    const courseAtt = { ...(attendanceMap[currentCourse.id] || {}) };
 
-      students.forEach((std) => {
-        const studentRecs = { ...(courseAtt[std.id] || {}) };
-        if (status === null) {
-          delete studentRecs[meetingNum];
-        } else {
-          studentRecs[meetingNum] = status;
-        }
-        courseAtt[std.id] = studentRecs;
-      });
-
-      return {
-        ...prev,
-        [currentCourse.id]: courseAtt,
-      };
+    students.forEach((std) => {
+      const studentRecs = { ...(courseAtt[std.id] || {}) };
+      if (status === null) {
+        delete studentRecs[meetingNum];
+      } else {
+        studentRecs[meetingNum] = status;
+      }
+      courseAtt[std.id] = studentRecs;
     });
+
+    const updatedMap = {
+      ...attendanceMap,
+      [currentCourse.id]: courseAtt,
+    };
+
+    setAttendanceMap(updatedMap);
+    pushCurrentStateToSheets({ attendanceMap: updatedMap });
   };
 
   // Handler for Meeting topic/date edit
   const handleSaveMeeting = (updatedMeeting: MeetingInfo) => {
     if (!currentCourse) return;
 
-    setCourses((prev) =>
-      prev.map((c) => {
-        if (c.id !== currentCourse.id) return c;
-        const updatedMeetings = c.meetings.map((m) =>
-          m.meetingNumber === updatedMeeting.meetingNumber ? updatedMeeting : m
-        );
-        return {
-          ...c,
-          meetings: updatedMeetings,
-        };
-      })
-    );
+    const updatedCourses = courses.map((c) => {
+      if (c.id !== currentCourse.id) return c;
+      const updatedMeetings = c.meetings.map((m) =>
+        m.meetingNumber === updatedMeeting.meetingNumber ? updatedMeeting : m
+      );
+      return {
+        ...c,
+        meetings: updatedMeetings,
+      };
+    });
+
+    setCourses(updatedCourses);
+    pushCurrentStateToSheets({ courses: updatedCourses });
   };
 
   // Handler for Grades
   const handleUpdateGrade = (studentId: string, updatedField: Partial<StudentGrade>) => {
     if (!currentCourse) return;
 
-    setGrades((prev) => {
-      const courseGrd = { ...(prev[currentCourse.id] || {}) };
-      const existing = courseGrd[studentId] || {
-        studentId,
-        courseId: currentCourse.id,
-        tugas: 0,
-        kuis: 0,
-        uts: 0,
-        uas: 0,
-      };
+    const courseGrd = { ...(grades[currentCourse.id] || {}) };
+    const existing = courseGrd[studentId] || {
+      studentId,
+      courseId: currentCourse.id,
+      tugas: 0,
+      kuis: 0,
+      uts: 0,
+      uas: 0,
+    };
 
-      courseGrd[studentId] = {
-        ...existing,
-        ...updatedField,
-      };
+    courseGrd[studentId] = {
+      ...existing,
+      ...updatedField,
+    };
 
-      return {
-        ...prev,
-        [currentCourse.id]: courseGrd,
-      };
-    });
+    const updatedGrades = {
+      ...grades,
+      [currentCourse.id]: courseGrd,
+    };
+
+    setGrades(updatedGrades);
+    debouncedSync({ grades: updatedGrades });
   };
 
   // Handler for Grade Weights
   const handleUpdateWeights = (newWeights: Course['gradeWeights']) => {
     if (!currentCourse) return;
 
-    setCourses((prev) =>
-      prev.map((c) => (c.id === currentCourse.id ? { ...c, gradeWeights: newWeights } : c))
-    );
+    const updatedCourses = courses.map((c) => (c.id === currentCourse.id ? { ...c, gradeWeights: newWeights } : c));
+    setCourses(updatedCourses);
+    pushCurrentStateToSheets({ courses: updatedCourses });
   };
 
   // Handler for Min Attendance Percent
   const handleUpdateMinAttendance = (minPercent: number) => {
     if (!currentCourse) return;
 
-    setCourses((prev) =>
-      prev.map((c) => (c.id === currentCourse.id ? { ...c, minAttendancePercent: minPercent } : c))
-    );
+    const updatedCourses = courses.map((c) => (c.id === currentCourse.id ? { ...c, minAttendancePercent: minPercent } : c));
+    setCourses(updatedCourses);
+    pushCurrentStateToSheets({ courses: updatedCourses });
   };
 
-  // Add new student
-  const handleAddStudent = (newStudentData: Omit<Student, 'id'>) => {
+  // Add new student (Immediately pushes to Google Sheets)
+  const handleAddStudent = async (newStudentData: Omit<Student, 'id'>) => {
     const newStudent: Student = {
       ...newStudentData,
       id: `std-${Date.now()}`,
     };
-    setStudents((prev) => [...prev, newStudent]);
+    const updatedStudents = [...students, newStudent];
+    setStudents(updatedStudents);
+    showSyncNotification('Menambahkan mahasiswa ke Google Sheets...', 'info');
+    await pushCurrentStateToSheets({ students: updatedStudents });
   };
 
-  // Add new course
-  const handleAddCourse = (newCourse: Course) => {
-    setCourses((prev) => [...prev, newCourse]);
+  // Add new course (Immediately pushes to Google Sheets)
+  const handleAddCourse = async (newCourse: Course) => {
+    const updatedCourses = [...courses, newCourse];
+    setCourses(updatedCourses);
     setSelectedCourseId(newCourse.id);
+    await pushCurrentStateToSheets({ courses: updatedCourses });
   };
 
-  // Add schedule
-  const handleAddSchedule = (newScheduleData: Omit<ScheduleItem, 'id'>) => {
+  // Add schedule (Immediately pushes to Google Sheets)
+  const handleAddSchedule = async (newScheduleData: Omit<ScheduleItem, 'id'>) => {
     const newSchedule: ScheduleItem = {
       ...newScheduleData,
       id: `sch-${Date.now()}`,
     };
-    setSchedules((prev) => [...prev, newSchedule]);
+    const updatedSchedules = [...schedules, newSchedule];
+    setSchedules(updatedSchedules);
+    showSyncNotification('Menambahkan jadwal ke Google Sheets...', 'info');
+    await pushCurrentStateToSheets({ schedules: updatedSchedules });
   };
 
-  // Delete schedule
-  const handleDeleteSchedule = (id: string) => {
-    setSchedules((prev) => prev.filter((s) => s.id !== id));
+  // Delete schedule (Immediately pushes to Google Sheets)
+  const handleDeleteSchedule = async (id: string) => {
+    const updatedSchedules = schedules.filter((s) => s.id !== id);
+    setSchedules(updatedSchedules);
+    await pushCurrentStateToSheets({ schedules: updatedSchedules });
   };
 
   // Pull Data from Google Sheets
@@ -357,6 +466,7 @@ export default function App() {
         lastSyncedAt: timeStr,
         errorMessage: undefined,
       }));
+      showSyncNotification('Data berhasil diperbarui dari Google Sheets!', 'success');
     } else {
       throw new Error(result.message);
     }
@@ -369,30 +479,7 @@ export default function App() {
       return;
     }
 
-    setIsSyncing(true);
-    const result = await pushDataToGoogleSheets(googleConfig.webAppUrl, {
-      students,
-      courses,
-      attendanceMap,
-      grades,
-      schedules,
-    });
-    setIsSyncing(false);
-
-    if (result.success) {
-      const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-      setGoogleConfig((prev) => ({
-        ...prev,
-        status: 'success',
-        lastSyncedAt: timeStr,
-      }));
-    } else {
-      setGoogleConfig((prev) => ({
-        ...prev,
-        status: 'error',
-        errorMessage: result.message,
-      }));
-    }
+    await pushCurrentStateToSheets();
   };
 
   // Reset & Clear Data Handlers
@@ -437,11 +524,19 @@ export default function App() {
 
     setCourses([cleanCourse]);
     setSelectedCourseId(cleanCourse.id);
+    pushCurrentStateToSheets({
+      students: [],
+      courses: [cleanCourse],
+      attendanceMap: {},
+      grades: {},
+      schedules: [],
+    });
   };
 
   const handleResetAttendanceAndGradesOnly = () => {
     setAttendanceMap({});
     setGrades({});
+    pushCurrentStateToSheets({ attendanceMap: {}, grades: {} });
   };
 
   const handleRestoreDemoData = () => {
@@ -451,6 +546,13 @@ export default function App() {
     setGrades(demoGrades);
     setSchedules(demoSchedules);
     setSelectedCourseId(demoCourses[0].id);
+    pushCurrentStateToSheets({
+      students: demoStudents,
+      courses: demoCourses,
+      attendanceMap: demoAttendanceMap,
+      grades: demoGrades,
+      schedules: demoSchedules,
+    });
   };
 
   // Import JSON backup
@@ -467,7 +569,29 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-blue-500 selection:text-white">
+    <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-blue-500 selection:text-white relative">
+      {/* Realtime Sync Floating Indicator */}
+      {syncToast.show && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className={`px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 ${
+            syncToast.type === 'success' 
+              ? 'bg-slate-900 text-white border-slate-700' 
+              : syncToast.type === 'info'
+              ? 'bg-blue-600 text-white border-blue-500'
+              : 'bg-rose-600 text-white border-rose-500'
+          }`}>
+            {isSyncing ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
+            ) : syncToast.type === 'success' ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <AlertCircle className="w-3.5 h-3.5 text-white" />
+            )}
+            <span>{syncToast.message}</span>
+          </div>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <Navbar
         courses={courses}

@@ -514,7 +514,13 @@ function saveJsonToSheet(sheet, items) {
   sheet.clear();
   if (!items || items.length === 0) return;
   
-  const headers = Object.keys(items[0]);
+  const keySet = {};
+  items.forEach(item => {
+    Object.keys(item).forEach(k => { keySet[k] = true; });
+  });
+  const headers = Object.keys(keySet);
+  if (headers.length === 0) return;
+
   const rows = [headers];
   
   items.forEach(item => {
@@ -523,7 +529,7 @@ function saveJsonToSheet(sheet, items) {
       if (typeof val === 'object' && val !== null) {
         return JSON.stringify(val);
       }
-      return val !== undefined ? val : '';
+      return val !== undefined && val !== null ? val : '';
     });
     rows.push(row);
   });
@@ -535,5 +541,6 @@ function saveJsonToSheet(sheet, items) {
   headerRange.setBackground('#1e293b');
   headerRange.setFontColor('#ffffff');
   headerRange.setFontWeight('bold');
+  sheet.autoResizeColumns(1, headers.length);
 }
 `;

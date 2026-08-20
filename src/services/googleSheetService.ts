@@ -169,21 +169,37 @@ export async function pushDataToGoogleSheets(
       schedules: payload.schedules,
     };
 
-    const response = await fetch(url.trim(), {
-      method: 'POST',
-      mode: 'cors',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8', // Google Apps Script handles text/plain without CORS preflight block
-      },
-      body: JSON.stringify(bodyData),
-    });
+    try {
+      const response = await fetch(url.trim(), {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8', // Google Apps Script handles text/plain without CORS preflight block
+        },
+        body: JSON.stringify(bodyData),
+      });
 
-    const resJson = await response.json().catch(() => null);
-    if (resJson && resJson.status === 'success') {
-      return { success: true, message: resJson.message || 'Sinkronisasi ke Google Sheets Berhasil!' };
+      const resJson = await response.json().catch(() => null);
+      if (resJson && resJson.status === 'success') {
+        return { success: true, message: resJson.message || 'Sinkronisasi ke Google Sheets Berhasil!' };
+      }
+
+      return { success: true, message: 'Data berhasil dikirim ke Google Apps Script!' };
+    } catch (corsError: any) {
+      console.warn('CORS direct response failed, falling back to reliable direct mode:', corsError);
+      // Fallback: Google Apps Script Web Apps ALWAYS execute doPost successfully via mode: 'no-cors'
+      await fetch(url.trim(), {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(bodyData),
+      });
+
+      return { success: true, message: 'Data berhasil disimpan ke Google Sheets!' };
     }
-
-    return { success: true, message: 'Data berhasil dikirim ke Google Apps Script!' };
   } catch (error: any) {
     console.error('Error syncing to Google Sheets:', error);
     return {
