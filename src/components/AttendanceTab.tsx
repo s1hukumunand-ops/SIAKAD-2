@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Course, Student, AttendanceStatus, StudentAttendanceMap, MeetingInfo } from '../types';
-import { calculateAttendanceSummary, formatBadgeClass, generateWarningWhatsAppMessage } from '../utils/calculations';
+import { calculateAttendanceSummary, formatBadgeClass, generateWarningWhatsAppMessage, getCourseStudents } from '../utils/calculations';
+import { formatIndoDate, generateConsecutiveMeetingDates, getDefaultStartDateForSemester } from '../utils/dateUtils';
+import { CourseSelectorBar } from './CourseSelectorBar';
 import { 
   Search, 
   Filter, 
@@ -13,47 +15,89 @@ import {
   Download, 
   Check, 
   X, 
-  Info,
-  HelpCircle,
-  Clock,
-  Sparkles
+  Info, 
+  HelpCircle, 
+  Clock, 
+  Sparkles, 
+  RefreshCw, 
+  BookOpen, 
+  Plus 
 } from 'lucide-react';
 
 interface AttendanceTabProps {
-  course: Course;
+  course?: Course | null;
+  courses?: Course[];
+  onSelectCourse?: (courseId: string) => void;
+  activeSemester?: string;
+  onOpenAddCourse?: () => void;
   students: Student[];
   attendanceMap: StudentAttendanceMap;
   onUpdateAttendance: (studentId: string, meetingNum: number, status: AttendanceStatus) => void;
   onBulkUpdateAttendance: (meetingNum: number, status: AttendanceStatus) => void;
   onEditMeeting: (meeting: MeetingInfo) => void;
   onOpenAddStudent: () => void;
+  onEditStudent?: (student: Student) => void;
+  onBatchUpdateMeetings?: (meetings: MeetingInfo[]) => void;
+  pinnedCourseIds?: string[];
+  onTogglePinCourse?: (courseId: string) => void;
+  onOpenSearchModal?: () => void;
 }
 
 export const AttendanceTab: React.FC<AttendanceTabProps> = ({
   course,
+  courses,
+  onSelectCourse,
+  activeSemester,
+  onOpenAddCourse,
   students,
   attendanceMap,
   onUpdateAttendance,
   onBulkUpdateAttendance,
   onEditMeeting,
   onOpenAddStudent,
+  onEditStudent,
+  onBatchUpdateMeetings,
+  pinnedCourseIds = [],
+  onTogglePinCourse = () => {},
+  onOpenSearchModal = () => {},
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'safe' | 'warning' | 'critical'>('all');
   const [activeMeetingDetail, setActiveMeetingDetail] = useState<MeetingInfo | null>(null);
 
-  const courseAttendance = attendanceMap[course.id] || {};
+  // Quick Date Generator State
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState(
+    () => course?.meetings?.[0]?.date || (course ? getDefaultStartDateForSemester(course.jadwalHari, course.semester) : '2026-09-07')
+  );
 
-  // Compute summary for every student
-  const studentSummaries = students.map((student) => {
-    const records = courseAttendance[student.id];
-    const summary = calculateAttendanceSummary(student, course, records);
-    return {
-      student,
-      records: records || {},
-      summary,
-    };
-  });
+  const semesterCourses = useMemo(() => {
+    if (!courses || courses.length === 0) return course ? [course] : [];
+    if (!activeSemester || activeSemester === 'Semua Semester') return courses;
+    return courses.filter((c) => c.semester === activeSemester);
+  }, [courses, activeSemester, course]);
+
+  const courseAttendance = attendanceMap[course?.id || ''] || {};
+
+  // Filter students based on active course & semester
+  const courseStudents = useMemo(() => {
+    if (!course) return [];
+    return getCourseStudents(students, course, activeSemester);
+  }, [students, course, activeSemester]);
+
+  // Compute summary for course-enrolled students
+  const studentSummaries = useMemo(() => {
+    if (!course) return [];
+    return courseStudents.map((student) => {
+      const records = courseAttendance[student.id];
+      const summary = calculateAttendanceSummary(student, course, records);
+      return {
+        student,
+        records: records || {},
+        summary,
+      };
+    });
+  }, [courseStudents, course, courseAttendance]);
 
   // Filter students
   const filteredStudents = studentSummaries.filter(({ student, summary }) => {
@@ -69,6 +113,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
 
   // Cycle attendance status on click: null -> H -> I -> S -> A -> null
   const handleCellClick = (studentId: string, meetingNum: number) => {
+    if (!course) return;
     const current = courseAttendance[studentId]?.[meetingNum] || null;
     let next: AttendanceStatus = 'H';
     if (current === 'H') next = 'I';
@@ -83,8 +128,50 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
   const criticalCount = studentSummaries.filter((s) => s.summary.status === 'critical').length;
   const warningCount = studentSummaries.filter((s) => s.summary.status === 'warning').length;
 
+  if (!course || semesterCourses.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-10 border border-slate-200 shadow-sm text-center my-6">
+        <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-200">
+          <BookOpen className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 mb-1">
+          Data Absensi Belum Tersedia ({activeSemester || 'Semester Ini'})
+        </h3>
+        <p className="text-sm text-slate-500 max-w-md mx-auto mb-6">
+          Belum ada mata kuliah yang terdaftar pada semester yang dipilih ({activeSemester}). Silakan tambahkan mata kuliah terlebih dahulu untuk mencatat presensi 14 pertemuan.
+        </p>
+        {onOpenAddCourse && (
+          <button
+            onClick={onOpenAddCourse}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Mata Kuliah</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-12">
+      {/* Course Selector Bar for 400+ Courses */}
+      {courses && courses.length > 0 && onSelectCourse && (
+        <CourseSelectorBar
+          courses={courses}
+          activeCourse={course}
+          activeSemester={activeSemester || course?.semester || 'Semua Semester'}
+          students={students}
+          attendanceMap={attendanceMap}
+          pinnedCourseIds={pinnedCourseIds}
+          onTogglePinCourse={onTogglePinCourse}
+          onSelectCourse={onSelectCourse}
+          onOpenAddCourse={onOpenAddCourse}
+          onOpenSearchModal={onOpenSearchModal}
+          titlePrefix="Ganti Mata Kuliah & Kelas"
+        />
+      )}
+
       {/* Header & Quick Action Controls */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -274,8 +361,27 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
             <tbody className="divide-y divide-slate-200">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={22} className="py-12 text-center text-slate-400 text-sm">
-                    Tidak ada mahasiswa yang sesuai dengan filter pencarian.
+                  <td colSpan={24} className="py-12 px-4 text-center bg-slate-50/50">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                        <UserPlus className="w-5 h-5" />
+                      </div>
+                      <p className="font-semibold text-sm text-slate-700">Belum Ada Data Mahasiswa</p>
+                      <p className="text-xs text-slate-500 max-w-sm">
+                        {searchQuery
+                          ? 'Tidak ada mahasiswa yang cocok dengan kata kunci pencarian.'
+                          : `Belum ada mahasiswa yang terdaftar pada mata kuliah ${course.nama} (${course.kelas}) untuk ${activeSemester || course.semester}.`}
+                      </p>
+                      {onOpenAddStudent && !searchQuery && (
+                        <button
+                          onClick={onOpenAddStudent}
+                          className="mt-2 inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-xs"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Tambah Mahasiswa ke Kelas Ini</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -300,14 +406,41 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
                       </td>
 
                       {/* Student Info */}
-                      <td className="py-2.5 px-3 sticky left-12 bg-white z-10 border-r border-slate-100">
-                        <div className="font-semibold text-slate-900 text-xs truncate max-w-[190px]">
-                          {student.nama}
+                      <td className="py-2.5 px-3 sticky left-12 bg-white z-10 border-r border-slate-100 group">
+                        <div className="flex items-center justify-between gap-1 max-w-[210px]">
+                          <div className="font-semibold text-slate-900 text-xs truncate">
+                            {student.nama}
+                          </div>
+                          {onEditStudent && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditStudent(student);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition shrink-0"
+                              title={`Edit data ${student.nama}`}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1">
                           <span>NIM: {student.nim}</span>
                           <span className="text-slate-300">•</span>
-                          <span>{student.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</span>
+                          <span>{student.jenisKelamin === 'L' ? 'L' : 'P'}</span>
+                          {onEditStudent && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditStudent(student);
+                              }}
+                              className="text-[10px] text-amber-700 hover:underline ml-auto font-sans sm:hidden"
+                            >
+                              Edit
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -415,32 +548,97 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
       </div>
 
       {/* 14 Meetings Topic Legend List */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
-        <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-blue-600" />
-          <span>Silabus & Materi 14 Pertemuan Perkuliahan</span>
-        </h3>
+      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-blue-600" />
+              <span>Silabus & Materi 14 Pertemuan Perkuliahan ({course.semester})</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Jadwal mingguan perkuliahan setiap hari <strong>{course.jadwalHari}</strong> ({course.jamMulai} - {course.jamSelesai})
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition border border-blue-200"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Atur Ulang Tanggal Otomatis (14 Minggu)</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Date Generator Box */}
+        {showDatePicker && (
+          <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-blue-950">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                <span>Otomatis Sinkronkan Tanggal 14 Pertemuan (+7 Hari Tiap Minggu)</span>
+              </div>
+              <p className="text-[11px] text-blue-800">
+                Pilih tanggal Pertemuan 1, sistem akan otomatis menetapkan tanggal untuk seluruh 14 pertemuan berturut-turut.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="p-2 bg-white border border-blue-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (!customStartDate || !onBatchUpdateMeetings) return;
+                  const newDates = generateConsecutiveMeetingDates(customStartDate, 14);
+                  const updatedMeetings = course.meetings.map((m, idx) => ({
+                    ...m,
+                    date: newDates[idx] || m.date,
+                  }));
+                  onBatchUpdateMeetings(updatedMeetings);
+                  setShowDatePicker(false);
+                }}
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs"
+              >
+                Terapkan ke 14 Pertemuan
+              </button>
+              <button
+                onClick={() => setShowDatePicker(false)}
+                className="p-2 text-slate-500 hover:text-slate-700 text-xs"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        )}
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           {course.meetings.map((m) => (
             <div
               key={m.meetingNumber}
               onClick={() => onEditMeeting(m)}
-              className="p-2.5 rounded-xl border border-slate-200/90 hover:border-blue-400 bg-slate-50/60 hover:bg-blue-50/30 transition cursor-pointer group"
+              className="p-3 rounded-xl border border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/40 transition cursor-pointer group shadow-2xs"
             >
-              <div className="flex items-center justify-between font-semibold text-slate-800 mb-1">
-                <span className="text-blue-700">Pertemuan {m.meetingNumber}</span>
-                <span className="text-[10px] text-slate-500 font-mono">{m.date || '-'}</span>
+              <div className="flex items-center justify-between font-semibold text-slate-800 mb-1.5">
+                <span className="text-blue-700 font-bold">Pertemuan {m.meetingNumber}</span>
+                <span className="text-[10px] text-slate-600 bg-slate-200/80 px-1.5 py-0.5 rounded-md font-medium">
+                  {m.mode}
+                </span>
+              </div>
+              <div className="text-[11px] text-blue-900 font-medium mb-1.5 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-blue-500" />
+                <span>{formatIndoDate(m.date)}</span>
               </div>
               <p className="text-slate-600 line-clamp-2 text-[11px] leading-relaxed">
                 {m.topic || 'Belum diisi topik'}
               </p>
-              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200/60 text-[10px] text-slate-500">
-                <span className="bg-slate-200/80 px-1.5 py-0.2 rounded font-medium">
-                  {m.mode}
-                </span>
-                <span className="text-blue-600 group-hover:underline font-medium">
-                  Edit Topik
+              <div className="flex items-center justify-end mt-2 pt-1.5 border-t border-slate-200/60 text-[10px]">
+                <span className="text-blue-600 group-hover:underline font-semibold flex items-center gap-0.5">
+                  <Edit3 className="w-3 h-3" /> Edit Topik & Tanggal
                 </span>
               </div>
             </div>

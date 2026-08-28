@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Course, Student, StudentAttendanceMap, StudentGrade } from '../types';
-import { calculateAttendanceSummary, calculateGrade } from '../utils/calculations';
+import { calculateAttendanceSummary, calculateGrade, getCourseStudents } from '../utils/calculations';
+import { CourseSelectorBar } from './CourseSelectorBar';
 import { 
   FileSpreadsheet, 
   Settings2, 
@@ -10,57 +11,97 @@ import {
   AlertCircle, 
   Sliders, 
   Download, 
-  Sparkles,
-  HelpCircle,
-  Calculator
+  Sparkles, 
+  HelpCircle, 
+  Calculator,
+  BookOpen,
+  Check,
+  Plus,
+  UserPlus,
+  Edit3
 } from 'lucide-react';
 
 interface GradesTabProps {
-  course: Course;
+  course?: Course | null;
+  courses?: Course[];
+  onSelectCourse?: (courseId: string) => void;
+  activeSemester?: string;
+  onOpenAddCourse?: () => void;
+  onOpenAddStudent?: () => void;
+  onEditStudent?: (student: Student) => void;
   students: Student[];
   attendanceMap: StudentAttendanceMap;
   grades: Record<string, Record<string, StudentGrade>>;
   onUpdateGrade: (studentId: string, updatedField: Partial<StudentGrade>) => void;
   onUpdateWeights: (weights: Course['gradeWeights']) => void;
   onOpenReportModal: () => void;
+  pinnedCourseIds?: string[];
+  onTogglePinCourse?: (courseId: string) => void;
+  onOpenSearchModal?: () => void;
 }
 
 export const GradesTab: React.FC<GradesTabProps> = ({
   course,
+  courses,
+  onSelectCourse,
+  activeSemester,
+  onOpenAddCourse,
+  onOpenAddStudent,
+  onEditStudent,
   students,
   attendanceMap,
   grades,
   onUpdateGrade,
   onUpdateWeights,
   onOpenReportModal,
+  pinnedCourseIds = [],
+  onTogglePinCourse = () => {},
+  onOpenSearchModal = () => {},
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showWeightModal, setShowWeightModal] = useState(false);
-  const [tempWeights, setTempWeights] = useState(course.gradeWeights);
+  const [tempWeights, setTempWeights] = useState(
+    course?.gradeWeights || { kehadiran: 10, tugas: 20, kuis: 15, uts: 25, uas: 30 }
+  );
 
-  const courseAttendance = attendanceMap[course.id] || {};
-  const courseGrades = grades[course.id] || {};
+  const semesterCourses = useMemo(() => {
+    if (!courses || courses.length === 0) return course ? [course] : [];
+    if (!activeSemester || activeSemester === 'Semua Semester') return courses;
+    return courses.filter((c) => c.semester === activeSemester);
+  }, [courses, activeSemester, course]);
 
-  // Compute grades for all students
-  const calculatedList = students.map((std) => {
-    const summary = calculateAttendanceSummary(std, course, courseAttendance[std.id]);
-    const gradeRecord = courseGrades[std.id] || {
-      studentId: std.id,
-      courseId: course.id,
-      tugas: 0,
-      kuis: 0,
-      uts: 0,
-      uas: 0,
-    };
+  const courseAttendance = attendanceMap[course?.id || ''] || {};
+  const courseGrades = grades[course?.id || ''] || {};
 
-    const calculated = calculateGrade(std, course, gradeRecord, summary);
-    return {
-      student: std,
-      summary,
-      gradeRecord,
-      calculated,
-    };
-  });
+  // Filter students based on active course & semester
+  const courseStudents = useMemo(() => {
+    if (!course) return [];
+    return getCourseStudents(students, course, activeSemester);
+  }, [students, course, activeSemester]);
+
+  // Compute grades for course-enrolled students
+  const calculatedList = useMemo(() => {
+    if (!course) return [];
+    return courseStudents.map((std) => {
+      const summary = calculateAttendanceSummary(std, course, courseAttendance[std.id]);
+      const gradeRecord = courseGrades[std.id] || {
+        studentId: std.id,
+        courseId: course.id,
+        tugas: 0,
+        kuis: 0,
+        uts: 0,
+        uas: 0,
+      };
+
+      const calculated = calculateGrade(std, course, gradeRecord, summary);
+      return {
+        student: std,
+        summary,
+        gradeRecord,
+        calculated,
+      };
+    });
+  }, [courseStudents, course, courseAttendance, courseGrades]);
 
   const filteredList = calculatedList.filter(({ student }) => 
     student.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -80,8 +121,50 @@ export const GradesTab: React.FC<GradesTabProps> = ({
     (tempWeights.uts || 0) +
     (tempWeights.uas || 0);
 
+  if (!course || semesterCourses.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-10 border border-slate-200 shadow-sm text-center my-6">
+        <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-200">
+          <BookOpen className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 mb-1">
+          Data Nilai Belum Tersedia ({activeSemester || 'Semester Ini'})
+        </h3>
+        <p className="text-sm text-slate-500 max-w-md mx-auto mb-6">
+          Belum ada mata kuliah yang terdaftar pada semester yang dipilih ({activeSemester}). Silakan tambahkan mata kuliah terlebih dahulu untuk memasukkan nilai perkuliahan.
+        </p>
+        {onOpenAddCourse && (
+          <button
+            onClick={onOpenAddCourse}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Mata Kuliah</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-12">
+      {/* Course Selector Bar for 400+ Courses */}
+      {courses && courses.length > 0 && onSelectCourse && (
+        <CourseSelectorBar
+          courses={courses}
+          activeCourse={course}
+          activeSemester={activeSemester || course?.semester || 'Semua Semester'}
+          students={students}
+          attendanceMap={attendanceMap}
+          pinnedCourseIds={pinnedCourseIds}
+          onTogglePinCourse={onTogglePinCourse}
+          onSelectCourse={onSelectCourse}
+          onOpenAddCourse={onOpenAddCourse}
+          onOpenSearchModal={onOpenSearchModal}
+          titlePrefix="Ganti Mata Kuliah & Kelas"
+        />
+      )}
+
       {/* Header & Controls */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -98,8 +181,18 @@ export const GradesTab: React.FC<GradesTabProps> = ({
           </p>
         </div>
 
-        {/* Weights Button & Report Button */}
+        {/* Action Buttons: Add Student, Weights Button & Report Button */}
         <div className="flex flex-wrap items-center gap-2">
+          {onOpenAddStudent && (
+            <button
+              onClick={onOpenAddStudent}
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-xs"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Tambah Mahasiswa</span>
+            </button>
+          )}
+
           <button
             id="open-weights-config-btn"
             onClick={() => {
@@ -211,8 +304,27 @@ export const GradesTab: React.FC<GradesTabProps> = ({
             <tbody className="divide-y divide-slate-200">
               {filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-400 text-sm">
-                    Tidak ada mahasiswa yang ditemukan.
+                  <td colSpan={13} className="py-12 px-4 text-center bg-slate-50/50">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                        <UserPlus className="w-5 h-5" />
+                      </div>
+                      <p className="font-semibold text-sm text-slate-700">Belum Ada Data Mahasiswa</p>
+                      <p className="text-xs text-slate-500 max-w-sm">
+                        {searchQuery
+                          ? 'Tidak ada mahasiswa yang cocok dengan kata kunci pencarian.'
+                          : `Belum ada mahasiswa yang terdaftar pada mata kuliah ${course.nama} (${course.kelas}) untuk ${activeSemester || course.semester}.`}
+                      </p>
+                      {onOpenAddStudent && !searchQuery && (
+                        <button
+                          onClick={onOpenAddStudent}
+                          className="mt-2 inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition shadow-xs"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Tambah Mahasiswa ke Kelas Ini</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -232,12 +344,33 @@ export const GradesTab: React.FC<GradesTabProps> = ({
                       </td>
 
                       {/* Mahasiswa Info */}
-                      <td className="py-2.5 px-3 sticky left-10 bg-white z-10 border-r border-slate-100">
-                        <div className="font-semibold text-slate-900 text-xs truncate max-w-[190px]">
-                          {student.nama}
+                      <td className="py-2.5 px-3 sticky left-10 bg-white z-10 border-r border-slate-100 group">
+                        <div className="flex items-center justify-between gap-1 max-w-[200px]">
+                          <div className="font-semibold text-slate-900 text-xs truncate">
+                            {student.nama}
+                          </div>
+                          {onEditStudent && (
+                            <button
+                              type="button"
+                              onClick={() => onEditStudent(student)}
+                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition shrink-0"
+                              title={`Edit data ${student.nama}`}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          {student.nim}
+                        <div className="text-[11px] text-slate-500 font-mono flex items-center justify-between">
+                          <span>{student.nim}</span>
+                          {onEditStudent && (
+                            <button
+                              type="button"
+                              onClick={() => onEditStudent(student)}
+                              className="text-[10px] text-amber-700 hover:underline sm:hidden"
+                            >
+                              Edit
+                            </button>
+                          )}
                         </div>
                       </td>
 

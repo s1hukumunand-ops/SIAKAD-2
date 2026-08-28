@@ -1,1 +1,51 @@
 @import "tailwindcss";
+
+@media print {
+  /* Hide all other DOM elements during print */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Expose only the document report canvas starting from kop surat to signatures */
+  #printable-report,
+  #printable-report * {
+    visibility: visible;
+  }
+
+  #printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  /* Prevent page-breaks in the middle of table rows and signature block */
+  table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Ensure background and borders render exactly on physical print or PDF */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  @page {
+    size: auto;
+    margin: 12mm 15mm 12mm 15mm;
+  }
+}

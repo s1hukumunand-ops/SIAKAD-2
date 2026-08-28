@@ -9,11 +9,11 @@ export const initialCourses: Course[] = [
     kode: 'HKM-101',
     nama: 'Hukum Tata Negara & Konstitusi',
     sks: 3,
-    semester: 'Semester Ganjil 2024/2025',
+    semester: 'Semester Ganjil 2026/2027',
     kelas: 'Kelas A',
-    dosenPengampu: 'Dosen Pengampu',
-    nipDosen: '-',
-    ruangan: 'Ruang Kuliah',
+    dosenPengampu: 'Dr. Hendra Syahputra, S.H., M.H.',
+    nipDosen: '198501012010121002',
+    ruangan: 'Gedung A - Ruang 204',
     jadwalHari: 'Senin',
     jamMulai: '08:00',
     jamSelesai: '10:30',
@@ -25,14 +25,22 @@ export const initialCourses: Course[] = [
       uts: 30,
       uas: 30,
     },
-    meetings: Array.from({ length: 14 }, (_, i) => ({
-      meetingNumber: i + 1,
-      date: '',
-      topic: i === 7 ? 'Pelaksanaan Ujian Tengah Semester (UTS)' : `Pokok Bahasan Pertemuan ${i + 1}`,
-      mode: 'Tatap Muka',
-      dosenHadir: true,
-      isCompleted: false,
-    })),
+    meetings: [
+      { meetingNumber: 1, date: '2026-09-07', topic: 'Kontrak Perkuliahan, Rencana Pembelajaran Semester (RPS) & Pengantar Hukum Tata Negara', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 2, date: '2026-09-14', topic: 'Teori Konstitusi, Klasifikasi & Hierarki Peraturan Perundang-Undangan', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 3, date: '2026-09-21', topic: 'Bentuk Negara, Bentuk Pemerintahan & Sistem Presidensial Indonesia', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 4, date: '2026-09-28', topic: 'Lembaga Kepresidenan & Wewenang Eksekutif dalam UUD 1945', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 5, date: '2026-10-05', topic: 'Lembaga Perwakilan Rakyat (DPR, DPD, MPR) & Fungsi Legislasi (Daring)', mode: 'Daring', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 6, date: '2026-10-12', topic: 'Kekuasaan Kehakiman & Penegakan Hukum Konstitusi (MA, MK, KY)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 7, date: '2026-10-19', topic: 'Review Materi Tengah Semester & Diskusi Kasus Uji Materiil', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 8, date: '2026-10-26', topic: 'Pelaksanaan Ujian Tengah Semester (UTS)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 9, date: '2026-11-02', topic: 'Hak Asasi Manusia dan Warga Negara dalam Konstitusi Indonesia', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 10, date: '2026-11-09', topic: 'Hubungan Pemerintah Pusat dan Daerah serta Otonomi Khusus', mode: 'Hybrid', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 11, date: '2026-11-16', topic: 'Hukum Acara Mahkamah Konstitusi & Praktik Judicial Review', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 12, date: '2026-11-23', topic: 'Sistem Pemilihan Umum & Demokrasi Konstitusional di Indonesia', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 13, date: '2026-11-30', topic: 'Lembaga Negara Independen (KPK, KPU, Bawaslu, Komnas HAM)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 14, date: '2026-12-07', topic: 'Kapita Selekta Hukum Tata Negara & Evaluasi Capaian Pembelajaran UAS', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+    ],
   }
 ];
 
@@ -53,6 +61,8 @@ export const demoStudents: Student[] = [
     noHp: '081234567890',
     email: 'ahmad.fauzi@student.univ.ac.id',
     jenisKelamin: 'L',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1'], // Enrolled in 1 course
   },
   {
     id: 'std-2',
@@ -63,6 +73,8 @@ export const demoStudents: Student[] = [
     noHp: '081298765432',
     email: 'bunga.citra@student.univ.ac.id',
     jenisKelamin: 'P',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1', 'crs-2'], // Enrolled in 2 courses
   },
   {
     id: 'std-3',
@@ -73,6 +85,8 @@ export const demoStudents: Student[] = [
     noHp: '085712345678',
     email: 'dimas.aditya@student.univ.ac.id',
     jenisKelamin: 'L',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1'],
   },
   {
     id: 'std-4',
@@ -83,6 +97,8 @@ export const demoStudents: Student[] = [
     noHp: '081345678901',
     email: 'fatimah.zahra@student.univ.ac.id',
     jenisKelamin: 'P',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1', 'crs-3'],
   },
   {
     id: 'std-5',
@@ -93,6 +109,8 @@ export const demoStudents: Student[] = [
     noHp: '081987654321',
     email: 'gilang.ramadhan@student.univ.ac.id',
     jenisKelamin: 'L',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1'],
   },
   {
     id: 'std-6',
@@ -103,6 +121,8 @@ export const demoStudents: Student[] = [
     noHp: '082134567890',
     email: 'hafizhah.ilmi@student.univ.ac.id',
     jenisKelamin: 'P',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1', 'crs-2', 'crs-3'], // Enrolled in 3 courses
   },
   {
     id: 'std-7',
@@ -113,6 +133,8 @@ export const demoStudents: Student[] = [
     noHp: '085678901234',
     email: 'irfan.maulana@student.univ.ac.id',
     jenisKelamin: 'L',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1'],
   },
   {
     id: 'std-8',
@@ -123,6 +145,8 @@ export const demoStudents: Student[] = [
     noHp: '087812345678',
     email: 'kezia.aurelia@student.univ.ac.id',
     jenisKelamin: 'P',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1', 'crs-2'],
   },
   {
     id: 'std-9',
@@ -133,6 +157,8 @@ export const demoStudents: Student[] = [
     noHp: '089612345678',
     email: 'm.rizky@student.univ.ac.id',
     jenisKelamin: 'L',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1'],
   },
   {
     id: 'std-10',
@@ -143,6 +169,8 @@ export const demoStudents: Student[] = [
     noHp: '081223344556',
     email: 'nabila.syahrani@student.univ.ac.id',
     jenisKelamin: 'P',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1', 'crs-3'],
   },
   {
     id: 'std-11',
@@ -153,6 +181,8 @@ export const demoStudents: Student[] = [
     noHp: '081399887766',
     email: 'rendi.oktavian@student.univ.ac.id',
     jenisKelamin: 'L',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1'],
   },
   {
     id: 'std-12',
@@ -163,6 +193,8 @@ export const demoStudents: Student[] = [
     noHp: '085211223344',
     email: 'siti.rahmawati@student.univ.ac.id',
     jenisKelamin: 'P',
+    semester: 'Semester Ganjil 2026/2027',
+    courseIds: ['crs-1', 'crs-2', 'crs-3'],
   }
 ];
 
@@ -172,7 +204,7 @@ export const demoCourses: Course[] = [
     kode: 'HKM-301',
     nama: 'Hukum Tata Negara & Konstitusi',
     sks: 3,
-    semester: 'Semester Ganjil 2024/2025',
+    semester: 'Semester Ganjil 2026/2027',
     kelas: 'Kelas A',
     dosenPengampu: 'Prof. Dr. H. Saldi Isra, S.H., M.P.A.',
     nipDosen: '196808201994031002',
@@ -189,20 +221,20 @@ export const demoCourses: Course[] = [
       uas: 30,
     },
     meetings: [
-      { meetingNumber: 1, date: '2024-09-02', topic: 'Kontrak Kuliah & Pengantar Hukum Tata Negara', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 2, date: '2024-09-09', topic: 'Teori Konstitusi & Hierarki Peraturan Perundang-Undangan', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 3, date: '2024-09-16', topic: 'Bentuk Negara, Bentuk Pemerintahan & Sistem Presidensial', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 4, date: '2024-09-23', topic: 'Lembaga Kepresidenan & Wewenang Eksekutif', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 5, date: '2024-09-30', topic: 'Lembaga Perwakilan Rakyat (DPR, DPD, MPR)', mode: 'Daring', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 6, date: '2024-10-07', topic: 'Kekuasaan Kehakiman (MA, MK, KY)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 7, date: '2024-10-14', topic: 'Review Materi Tengah Semester & Diskusi Kasus Konstitusi', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 8, date: '2024-10-21', topic: 'Pelaksanaan Ujian Tengah Semester (UTS)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 9, date: '2024-10-28', topic: 'Hak Asasi Manusia dalam Konstitusi Indonesia', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 10, date: '2024-11-04', topic: 'Hubungan Pemerintah Pusat dan Daerah (Otonomi Daerah)', mode: 'Hybrid', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 11, date: '2024-11-11', topic: 'Hukum Acara Mahkamah Konstitusi & Pengujian UU (Judicial Review)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 12, date: '2024-11-18', topic: 'Sistem Pemilihan Umum & Demokrasi Konstitusional', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 13, date: '2024-11-25', topic: 'Lembaga Negara Independen (KPK, KPU, Bawaslu, Komnas HAM)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
-      { meetingNumber: 14, date: '2024-12-02', topic: 'Kapita Selekta & Evaluasi Kesiapan UAS', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 1, date: '2026-09-07', topic: 'Kontrak Kuliah & Pengantar Hukum Tata Negara', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 2, date: '2026-09-14', topic: 'Teori Konstitusi & Hierarki Peraturan Perundang-Undangan', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 3, date: '2026-09-21', topic: 'Bentuk Negara, Bentuk Pemerintahan & Sistem Presidensial', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 4, date: '2026-09-28', topic: 'Lembaga Kepresidenan & Wewenang Eksekutif', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 5, date: '2026-10-05', topic: 'Lembaga Perwakilan Rakyat (DPR, DPD, MPR)', mode: 'Daring', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 6, date: '2026-10-12', topic: 'Kekuasaan Kehakiman (MA, MK, KY)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 7, date: '2026-10-19', topic: 'Review Materi Tengah Semester & Diskusi Kasus Konstitusi', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 8, date: '2026-10-26', topic: 'Pelaksanaan Ujian Tengah Semester (UTS)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 9, date: '2026-11-02', topic: 'Hak Asasi Manusia dalam Konstitusi Indonesia', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 10, date: '2026-11-09', topic: 'Hubungan Pemerintah Pusat dan Daerah (Otonomi Daerah)', mode: 'Hybrid', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 11, date: '2026-11-16', topic: 'Hukum Acara Mahkamah Konstitusi & Pengujian UU (Judicial Review)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 12, date: '2026-11-23', topic: 'Sistem Pemilihan Umum & Demokrasi Konstitusional', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 13, date: '2026-11-30', topic: 'Lembaga Negara Independen (KPK, KPU, Bawaslu, Komnas HAM)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 14, date: '2026-12-07', topic: 'Kapita Selekta & Evaluasi Kesiapan UAS', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
     ]
   },
   {
@@ -210,7 +242,7 @@ export const demoCourses: Course[] = [
     kode: 'HKM-304',
     nama: 'Hukum Acara Pidana',
     sks: 3,
-    semester: 'Semester Ganjil 2024/2025',
+    semester: 'Semester Ganjil 2026/2027',
     kelas: 'Kelas B',
     dosenPengampu: 'Dr. Kurnia Warman, S.H., M.Hum.',
     nipDosen: '197205151998021001',
@@ -226,21 +258,29 @@ export const demoCourses: Course[] = [
       uts: 25,
       uas: 30,
     },
-    meetings: Array.from({ length: 14 }, (_, i) => ({
-      meetingNumber: i + 1,
-      date: `2024-${String(9 + Math.floor(i / 4)).padStart(2, '0')}-${String(4 + ((i % 4) * 7)).padStart(2, '0')}`,
-      topic: i === 7 ? 'Ujian Tengah Semester (UTS)' : `Pokok Bahasan Pertemuan ke-${i + 1}: Hukum Pembuktian & Acara Sidang Pidana`,
-      mode: i === 4 || i === 9 ? 'Daring' : 'Tatap Muka',
-      dosenHadir: true,
-      isCompleted: true,
-    }))
+    meetings: [
+      { meetingNumber: 1, date: '2026-09-02', topic: 'Pengantar Hukum Acara Pidana & Asas-Asas Peradilan Pidana', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 2, date: '2026-09-09', topic: 'Penyelidikan dan Penyidikan dalam KUHAP', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 3, date: '2026-09-16', topic: 'Upaya Paksa (Penangkapan, Penahanan, Penggeledahan, Penyitaan)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 4, date: '2026-09-23', topic: 'Prapenadilan & Perlindungan Hak Tersangka', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 5, date: '2026-09-30', topic: 'Penuntutan & Surat Dakwaan Jaksa Penuntut Umum (Daring)', mode: 'Daring', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 6, date: '2026-10-07', topic: 'Kewenangan Mengadili & Eksepsi Penasihat Hukum', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 7, date: '2026-10-14', topic: 'Review Materi Pembuktian Pra-UTS', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 8, date: '2026-10-21', topic: 'Pelaksanaan Ujian Tengah Semester (UTS)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 9, date: '2026-10-28', topic: 'Alat Bukti & Kekuatan Pembuktian dalam Sidang Pidana', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 10, date: '2026-11-04', topic: 'Pemeriksaan Saksi, Ahli & Terdakwa (Hybrid)', mode: 'Hybrid', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 11, date: '2026-11-11', topic: 'Surat Tuntutan (Requisitoir) & Pledoi Pembelaan', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 12, date: '2026-11-18', topic: 'Musyawarah Majelis Hakim & Putusan Pengadilan', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 13, date: '2026-11-25', topic: 'Upaya Hukum Biasa (Banding, Kasasi) & Luar Biasa (PK)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 14, date: '2026-12-02', topic: 'Simulasi Sidang Peradilan Semu & Evaluasi Kesiapan UAS', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+    ]
   },
   {
     id: 'crs-3',
     kode: 'HKM-202',
     nama: 'Hukum Perdata & Kontrak Bisnis',
     sks: 3,
-    semester: 'Semester Ganjil 2024/2025',
+    semester: 'Semester Ganjil 2026/2027',
     kelas: 'Kelas C',
     dosenPengampu: 'Dr. Yuliandri, S.H., M.H.',
     nipDosen: '196207181988111001',
@@ -256,14 +296,22 @@ export const demoCourses: Course[] = [
       uts: 25,
       uas: 25,
     },
-    meetings: Array.from({ length: 14 }, (_, i) => ({
-      meetingNumber: i + 1,
-      date: `2024-${String(9 + Math.floor(i / 4)).padStart(2, '0')}-${String(5 + ((i % 4) * 7)).padStart(2, '0')}`,
-      topic: `Materi Pertemuan ke-${i + 1}: Asas Hukum Perikatan & Perancangan Kontrak`,
-      mode: 'Tatap Muka',
-      dosenHadir: true,
-      isCompleted: true,
-    }))
+    meetings: [
+      { meetingNumber: 1, date: '2026-09-03', topic: 'Asas-Asas Hukum Perikatan & Ruang Lingkup Kontrak', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 2, date: '2026-09-10', topic: 'Syarat Sahnya Perjanjian (Pasal 1320 KUHPerdata)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 3, date: '2026-09-17', topic: 'Wanprestasi, Somasi dan Ganti Kerugian', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 4, date: '2026-09-24', topic: 'Overmacht / Force Majeure dalam Transaksi Bisnis', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 5, date: '2026-10-01', topic: 'Hapusnya Perikatan & Pembatalan Kontrak (Daring)', mode: 'Daring', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 6, date: '2026-10-08', topic: 'Anatomi & Klausul-Klausul Standar Kontrak Bisnis', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 7, date: '2026-10-15', topic: 'Review Materi Perikatan Pra-UTS', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 8, date: '2026-10-22', topic: 'Pelaksanaan Ujian Tengah Semester (UTS)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 9, date: '2026-10-29', topic: 'Perjanjian Jual Beli, Sewa Menyewa & Pinjam Meminjam', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 10, date: '2026-11-05', topic: 'Kontrak Elektronik (E-Commerce) & Tanda Tangan Digital (Hybrid)', mode: 'Hybrid', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 11, date: '2026-11-12', topic: 'Penyusunan MoU, Perjanjian Kerjasama & Non-Disclosure Agreement', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 12, date: '2026-11-19', topic: 'Penyelesaian Sengketa Kontrak (Negosiasi, Mediasi, Arbitrase)', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 13, date: '2026-11-26', topic: 'Legal Due Diligence & Audit Kontrak Komersial', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+      { meetingNumber: 14, date: '2026-12-03', topic: 'Praktik Legal Drafting Kontrak Bisnis & Kesiapan UAS', mode: 'Tatap Muka', dosenHadir: true, isCompleted: true },
+    ]
   }
 ];
 
@@ -426,6 +474,7 @@ function doGet(e) {
         attendance: getSheetDataAsJson(ss.getSheetByName('Absensi14Pertemuan')),
         grades: getSheetDataAsJson(ss.getSheetByName('Nilai')),
         schedules: getSheetDataAsJson(ss.getSheetByName('JadwalKuliah')),
+        users: getSheetDataAsJson(ss.getSheetByName('Pengguna')),
         timestamp: new Date().toISOString()
       };
     }
@@ -445,8 +494,34 @@ function doPost(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     initializeSheetsIfNeeded(ss);
 
-    const postData = JSON.parse(e.postData.contents);
+    let postData = {};
+    try {
+      postData = JSON.parse(e.postData.contents);
+    } catch(err) {
+      postData = {};
+    }
     const action = postData.action || 'syncAll';
+
+    if (action === 'ping') {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        message: 'Koneksi ke Google Sheets & Apps Script Berhasil Terhubung!',
+        timestamp: new Date().toISOString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'getAll') {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        students: getSheetDataAsJson(ss.getSheetByName('Mahasiswa')),
+        courses: getSheetDataAsJson(ss.getSheetByName('MataKuliah')),
+        attendance: getSheetDataAsJson(ss.getSheetByName('Absensi14Pertemuan')),
+        grades: getSheetDataAsJson(ss.getSheetByName('Nilai')),
+        schedules: getSheetDataAsJson(ss.getSheetByName('JadwalKuliah')),
+        users: getSheetDataAsJson(ss.getSheetByName('Pengguna')),
+        timestamp: new Date().toISOString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
 
     if (action === 'syncAll') {
       if (postData.students) saveJsonToSheet(ss.getSheetByName('Mahasiswa'), postData.students);
@@ -454,10 +529,11 @@ function doPost(e) {
       if (postData.attendance) saveJsonToSheet(ss.getSheetByName('Absensi14Pertemuan'), postData.attendance);
       if (postData.grades) saveJsonToSheet(ss.getSheetByName('Nilai'), postData.grades);
       if (postData.schedules) saveJsonToSheet(ss.getSheetByName('JadwalKuliah'), postData.schedules);
+      if (postData.users) saveJsonToSheet(ss.getSheetByName('Pengguna'), postData.users);
 
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
-        message: 'Data Rekap Perkuliahan & Absensi Berhasil Disimpan ke Google Sheets!',
+        message: 'Data Rekap Perkuliahan, Pengguna & Absensi Berhasil Disimpan ke Google Sheets!',
         updatedRows: postData.students ? postData.students.length : 0,
         timestamp: new Date().toISOString()
       })).setMimeType(ContentService.MimeType.JSON);
@@ -477,7 +553,7 @@ function doPost(e) {
 }
 
 function initializeSheetsIfNeeded(ss) {
-  const requiredSheets = ['Mahasiswa', 'MataKuliah', 'Absensi14Pertemuan', 'Nilai', 'JadwalKuliah'];
+  const requiredSheets = ['Mahasiswa', 'MataKuliah', 'Absensi14Pertemuan', 'Nilai', 'JadwalKuliah', 'Pengguna'];
   requiredSheets.forEach(name => {
     let sheet = ss.getSheetByName(name);
     if (!sheet) {
@@ -498,15 +574,53 @@ function getSheetDataAsJson(sheet) {
     const row = data[i];
     const obj = {};
     for (let j = 0; j < headers.length; j++) {
+      const headerKey = String(headers[j]).trim();
       let val = row[j];
-      if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
-        try { val = JSON.parse(val); } catch (e) {}
+      
+      // If cell is a Google Sheets Date Object
+      if (val instanceof Date) {
+        val = Utilities.formatDate(val, Session.getScriptTimeZone() || 'Asia/Jakarta', 'yyyy-MM-dd');
       }
-      obj[headers[j]] = val;
+      
+      if (typeof val === 'string') {
+        if (headerKey.toLowerCase() === 'courseids') {
+          try {
+            val = JSON.parse(val);
+          } catch (e) {
+            val = val.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+          }
+        } else if (val.startsWith('{') || val.startsWith('[')) {
+          try { val = JSON.parse(val); } catch (e) {}
+        }
+      }
+      
+      obj[headerKey] = val;
     }
     rows.push(obj);
   }
   return rows;
+}
+
+function getStandardHeaders(sheetName) {
+  if (sheetName === 'Mahasiswa') {
+    return ['id', 'nim', 'nama', 'prodi', 'angkatan', 'noHp', 'email', 'jenisKelamin', 'semester', 'courseIds'];
+  }
+  if (sheetName === 'MataKuliah') {
+    return ['id', 'kode', 'nama', 'sks', 'semester', 'kelas', 'dosenPengampu', 'nipDosen', 'ruangan', 'jadwalHari', 'jamMulai', 'jamSelesai', 'minAttendancePercent', 'meetings', 'gradeWeights'];
+  }
+  if (sheetName === 'JadwalKuliah') {
+    return ['id', 'courseId', 'namaMK', 'kodeMK', 'sks', 'hari', 'jamMulai', 'jamSelesai', 'ruangan', 'dosen', 'kelas', 'warna'];
+  }
+  if (sheetName === 'Absensi14Pertemuan') {
+    return ['courseId', 'studentId', 'records'];
+  }
+  if (sheetName === 'Nilai') {
+    return ['studentId', 'courseId', 'kehadiranManual', 'tugas', 'kuis', 'uts', 'uas', 'catatan'];
+  }
+  if (sheetName === 'Pengguna') {
+    return ['id', 'username', 'password', 'nama', 'role', 'nipOrNim', 'email', 'prodi', 'dosenName', 'studentId', 'nim'];
+  }
+  return null;
 }
 
 function saveJsonToSheet(sheet, items) {
@@ -514,22 +628,31 @@ function saveJsonToSheet(sheet, items) {
   sheet.clear();
   if (!items || items.length === 0) return;
   
-  const keySet = {};
-  items.forEach(item => {
-    Object.keys(item).forEach(k => { keySet[k] = true; });
-  });
-  const headers = Object.keys(keySet);
+  const sheetName = sheet.getName();
+  const standardHeaders = getStandardHeaders(sheetName);
+  
+  let headers = [];
+  if (standardHeaders) {
+    headers = standardHeaders;
+  } else {
+    const keySet = {};
+    items.forEach(item => {
+      Object.keys(item).forEach(k => { keySet[k] = true; });
+    });
+    headers = Object.keys(keySet);
+  }
   if (headers.length === 0) return;
 
   const rows = [headers];
   
   items.forEach(item => {
     const row = headers.map(h => {
-      const val = item[h];
+      let val = item[h];
+      
       if (typeof val === 'object' && val !== null) {
         return JSON.stringify(val);
       }
-      return val !== undefined && val !== null ? val : '';
+      return val !== undefined && val !== null ? String(val) : '';
     });
     rows.push(row);
   });

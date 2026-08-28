@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ScheduleItem, Course } from '../types';
 import { 
   CalendarDays, 
@@ -10,16 +10,20 @@ import {
   Edit, 
   BookOpen, 
   ExternalLink,
-  CalendarCheck2
+  CalendarCheck2,
+  Search,
+  X
 } from 'lucide-react';
 
 interface ScheduleTabProps {
   schedules: ScheduleItem[];
   courses: Course[];
+  activeSemester?: string;
   onAddSchedule: (schedule: Omit<ScheduleItem, 'id'>) => void;
   onDeleteSchedule: (id: string) => void;
   onSelectCourse: (courseId: string) => void;
   onNavigateTab: (tab: 'attendance' | 'grades') => void;
+  onOpenAddCourse?: () => void;
 }
 
 const DAYS: ('Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu')[] = [
@@ -29,16 +33,25 @@ const DAYS: ('Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu')[] = [
 export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   schedules,
   courses,
+  activeSemester,
   onAddSchedule,
   onDeleteSchedule,
   onSelectCourse,
   onNavigateTab,
+  onOpenAddCourse,
 }) => {
   const [selectedDay, setSelectedDay] = useState<string>('all');
+  const [scheduleSearch, setScheduleSearch] = useState('');
+  const [selectedLecturer, setSelectedLecturer] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
 
+  const semesterCourses = useMemo(() => {
+    if (!activeSemester || activeSemester === 'Semua Semester') return courses;
+    return courses.filter((c) => c.semester === activeSemester);
+  }, [courses, activeSemester]);
+
   // Form State
-  const [courseId, setCourseId] = useState(courses[0]?.id || '');
+  const [courseId, setCourseId] = useState(semesterCourses[0]?.id || courses[0]?.id || '');
   const [hari, setHari] = useState<'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu'>('Senin');
   const [jamMulai, setJamMulai] = useState('08:00');
   const [jamSelesai, setJamSelesai] = useState('10:30');
@@ -49,9 +62,64 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
   const dayNamesIndo = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   const currentDayName = dayNamesIndo[new Date().getDay()];
 
-  const filteredSchedules = selectedDay === 'all'
-    ? schedules
-    : schedules.filter((s) => s.hari === selectedDay);
+  // Ensure every course has a schedule display filtered by semester
+  const activeSchedulesList = useMemo(() => {
+    if (schedules && schedules.length > 0) {
+      if (!activeSemester || activeSemester === 'Semua Semester') {
+        return schedules;
+      }
+      return schedules.filter((s) => {
+        if (s.semester) return s.semester === activeSemester;
+        const matchingCourse = courses.find((c) => c.id === s.courseId);
+        return matchingCourse ? matchingCourse.semester === activeSemester : false;
+      });
+    }
+
+    return semesterCourses.map((c, idx) => ({
+      id: `sch-course-${c.id}`,
+      courseId: c.id,
+      namaMK: c.nama,
+      kodeMK: c.kode,
+      sks: c.sks,
+      semester: c.semester,
+      hari: (['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].includes(c.jadwalHari) ? c.jadwalHari : 'Senin') as any,
+      jamMulai: c.jamMulai || '08:00',
+      jamSelesai: c.jamSelesai || '10:30',
+      ruangan: c.ruangan || 'Ruang Kuliah',
+      dosen: c.dosenPengampu || 'Dosen Pengampu',
+      kelas: c.kelas || 'Kelas A',
+      warna: ['blue', 'emerald', 'purple', 'amber', 'indigo'][idx % 5],
+    }));
+  }, [schedules, courses, semesterCourses, activeSemester]);
+
+  // Lecturer options for filter
+  const lecturerOptions = useMemo(() => {
+    const set = new Set<string>();
+    activeSchedulesList.forEach((s) => {
+      if (s.dosen) set.add(s.dosen.trim());
+    });
+    return Array.from(set).sort();
+  }, [activeSchedulesList]);
+
+  // Filtered schedules by Day, Search query, and Lecturer
+  const filteredSchedules = useMemo(() => {
+    return activeSchedulesList.filter((s) => {
+      if (selectedDay !== 'all' && s.hari !== selectedDay) return false;
+      if (selectedLecturer !== 'all' && s.dosen !== selectedLecturer) return false;
+      if (scheduleSearch.trim()) {
+        const q = scheduleSearch.toLowerCase();
+        const matchName = s.namaMK.toLowerCase().includes(q);
+        const matchKode = s.kodeMK.toLowerCase().includes(q);
+        const matchDosen = s.dosen.toLowerCase().includes(q);
+        const matchRuang = s.ruangan.toLowerCase().includes(q);
+        const matchKelas = s.kelas.toLowerCase().includes(q);
+        if (!matchName && !matchKode && !matchDosen && !matchRuang && !matchKelas) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [activeSchedulesList, selectedDay, selectedLecturer, scheduleSearch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +131,7 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
       namaMK: selectedCourse.nama,
       kodeMK: selectedCourse.kode,
       sks: selectedCourse.sks,
+      semester: selectedCourse.semester || activeSemester,
       hari,
       jamMulai,
       jamSelesai,
@@ -87,62 +156,117 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({
             <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
               Hari Ini: {currentDayName}
             </span>
+            <span className="bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+              Total {activeSchedulesList.length} Jadwal
+            </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
             Daftar waktu dan ruangan perkuliahan per semester. Klik mata kuliah untuk langsung membuka presensi.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition shadow-sm self-start md:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Tambah Jadwal Kuliah</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {onOpenAddCourse && (
+            <button
+              onClick={onOpenAddCourse}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Mata Kuliah & Jadwal</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2.5 rounded-xl transition border border-slate-200"
+          >
+            <Clock className="w-3.5 h-3.5 text-slate-500" />
+            <span>Atur Slot Jam Tambahan</span>
+          </button>
+        </div>
       </div>
 
-      {/* Day Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-        <button
-          onClick={() => setSelectedDay('all')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
-            selectedDay === 'all'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          Semua Hari ({schedules.length})
-        </button>
+      {/* Filter & Search Bar */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        {/* Day Filter Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          <button
+            onClick={() => setSelectedDay('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+              selectedDay === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            Semua Hari ({activeSchedulesList.length})
+          </button>
 
-        {DAYS.map((day) => {
-          const count = schedules.filter((s) => s.hari === day).length;
-          const isToday = currentDayName === day;
+          {DAYS.map((day) => {
+            const count = activeSchedulesList.filter((s) => s.hari === day).length;
+            const isToday = currentDayName === day;
 
-          return (
-            <button
-              key={day}
-              onClick={() => setSelectedDay(day)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-                selectedDay === day
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : isToday
-                  ? 'bg-blue-50 text-blue-700 border border-blue-300 font-bold'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <span>{day}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                selectedDay === day ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {count}
-              </span>
-              {isToday && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Hari Ini" />
-              )}
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={day}
+                onClick={() => setSelectedDay(day)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+                  selectedDay === day
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : isToday
+                    ? 'bg-blue-50 text-blue-700 border border-blue-300 font-bold'
+                    : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>{day}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  selectedDay === day ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {count}
+                </span>
+                {isToday && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Hari Ini" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Schedule Search & Lecturer Filter */}
+        <div className="flex flex-wrap items-center gap-2 ml-auto">
+          <div className="relative min-w-[200px]">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari jadwal, ruang, MK..."
+              value={scheduleSearch}
+              onChange={(e) => setScheduleSearch(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {scheduleSearch && (
+              <button
+                onClick={() => setScheduleSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {lecturerOptions.length > 1 && (
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-xl text-xs max-w-[180px]">
+              <User className="w-3 h-3 text-slate-400 shrink-0" />
+              <select
+                value={selectedLecturer}
+                onChange={(e) => setSelectedLecturer(e.target.value)}
+                className="bg-transparent text-slate-700 font-medium focus:outline-none cursor-pointer text-xs truncate"
+              >
+                <option value="all">Semua Dosen</option>
+                {lecturerOptions.map((doc) => (
+                  <option key={doc} value={doc}>{doc}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Schedule Cards Grid */}

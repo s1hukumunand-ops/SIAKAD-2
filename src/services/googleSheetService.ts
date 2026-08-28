@@ -1,6 +1,6 @@
-import { Student, Course, StudentAttendanceMap, StudentGrade, ScheduleItem } from '../types';
+import { Student, Course, StudentAttendanceMap, StudentGrade, ScheduleItem, UserAccount } from '../types';
 
-export const DEFAULT_GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz-Si-yDWV9ygSOmo-wNsHK6XGoUZterlBkkE9ecjXEM2qt7TBQqBvwIAtg3F2JVuki/exec';
+export const DEFAULT_GOOGLE_APPS_SCRIPT_URL = '';
 
 export interface SyncPayload {
   students: Student[];
@@ -12,6 +12,7 @@ export interface SyncPayload {
   }[];
   grades: StudentGrade[];
   schedules: ScheduleItem[];
+  users?: UserAccount[];
 }
 
 export async function testAppsScriptConnection(url: string): Promise<{ success: boolean; message: string }> {
@@ -19,32 +20,50 @@ export async function testAppsScriptConnection(url: string): Promise<{ success: 
     return { success: false, message: 'URL Google Apps Script tidak valid. Pastikan format diawali https://script.google.com/macros/s/.../exec' };
   }
 
-  try {
-    const testUrl = `${url.trim()}?action=ping`;
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      mode: 'cors',
-    });
+  const cleanUrl = url.trim();
 
-    if (!response.ok) {
-      throw new Error(`HTTP Error status: ${response.status} ${response.statusText}`);
+  try {
+    const testUrl = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}action=ping&t=${Date.now()}`;
+    let response: Response | null = null;
+    
+    try {
+      response = await fetch(testUrl, {
+        method: 'GET',
+        mode: 'cors',
+        redirect: 'follow',
+      });
+    } catch (getErr) {
+      // Fallback to text/plain POST
+      try {
+        response = await fetch(cleanUrl, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'ping' }),
+        });
+      } catch (postErr) {
+        response = null;
+      }
     }
 
-    const data = await response.json();
-    if (data.status === 'success' || data.message) {
+    if (!response || !response.ok) {
+      return {
+        success: false,
+        message: 'Gagal terhubung. Pastikan Web App di Google Apps Script sudah di-Deploy dengan akses "Anyone" (Siapa Saja).',
+      };
+    }
+
+    const data = await response.json().catch(() => null);
+    if (data && (data.status === 'success' || data.message)) {
       return { success: true, message: data.message || 'Koneksi ke Google Sheets & Apps Script berhasil terverifikasi!' };
     }
 
     return { success: true, message: 'Berhasil menghubungi endpoint Google Apps Script!' };
   } catch (error: any) {
-    console.warn('Apps Script direct GET error:', error);
-    // Google Apps Script redirects might face standard browser CORS if executed without JSONP or direct CORS,
-    // Provide actionable diagnostic help:
     return {
       success: false,
-      message: error?.message?.includes('Failed to fetch') || error?.message?.includes('NetworkError')
-        ? 'Gagal menghubungi API. Pastikan Anda telah melakukan "Deploy as Web App" dengan akses "Anyone" (Siapa saja).'
-        : `Gagal terhubung: ${error?.message || 'Error tidak diketahui'}`
+      message: 'Gagal menghubungi API. Pastikan Anda telah melakukan "Deploy as Web App" dengan akses "Anyone" (Siapa saja).',
     };
   }
 }
@@ -58,28 +77,187 @@ export async function fetchDataFromGoogleSheets(url: string): Promise<{
     attendanceMap: StudentAttendanceMap;
     grades: Record<string, Record<string, StudentGrade>>;
     schedules: ScheduleItem[];
+    users: UserAccount[];
   };
 }> {
   if (!url || !url.trim().startsWith('http')) {
     return { success: false, message: 'URL Google Apps Script belum diisi.' };
   }
 
-  try {
-    const fetchUrl = `${url.trim()}${url.includes('?') ? '&' : '?'}action=getAll&t=${Date.now()}`;
-    const response = await fetch(fetchUrl, {
-      method: 'GET',
-      mode: 'cors',
-    });
+  const cleanUrl = url.trim();
 
-    if (!response.ok) {
-      throw new Error(`HTTP Error status: ${response.status}`);
+  try {
+    const fetchUrl = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}action=getAll&t=${Date.now()}`;
+    let response: Response | null = null;
+    
+    // Primary attempt: GET with cors
+    try {
+      response = await fetch(fetchUrl, {
+        method: 'GET',
+        mode: 'cors',
+        redirect: 'follow',
+      });
+    } catch (getErr) {
+      // Secondary attempt: POST with text/plain { action: 'getAll' }
+      try {
+        response = await fetch(cleanUrl, {
+          method: 'POST',
+          mode: 'cors',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'getAll' }),
+        });
+      } catch (postErr) {
+        response = null;
+      }
     }
 
-    const result = await response.json();
-    if (result.status === 'success') {
-      const students: Student[] = result.students || [];
-      const courses: Course[] = result.courses || [];
-      const schedules: ScheduleItem[] = result.schedules || [];
+    if (!response || !response.ok) {
+      return {
+        success: false,
+        message: 'Tidak dapat mengambil data dari Google Sheets. Pastikan URL Web App benar dan di-deploy dengan akses Anyone.',
+      };
+    }
+
+    const result = await response.json().catch(() => null);
+    if (!result || result.status !== 'success') {
+      return { success: false, message: result?.message || 'Gagal memuat data dari Google Sheets.' };
+    }
+      const rawStudents = Array.isArray(result.students) ? result.students : [];
+      const students: Student[] = rawStudents.map((s: any, idx: number) => {
+        let parsedCourseIds: string[] = [];
+        if (Array.isArray(s.courseIds)) {
+          parsedCourseIds = s.courseIds.map(String);
+        } else if (typeof s.courseIds === 'string' && s.courseIds.trim()) {
+          try {
+            const parsed = JSON.parse(s.courseIds);
+            parsedCourseIds = Array.isArray(parsed) ? parsed.map(String) : [String(s.courseIds)];
+          } catch {
+            parsedCourseIds = s.courseIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+          }
+        } else if (s.courseId) {
+          parsedCourseIds = [String(s.courseId)];
+        }
+
+        return {
+          id: String(s.id || `std-${Date.now()}-${idx}`),
+          nim: String(s.nim || ''),
+          nama: String(s.nama || ''),
+          prodi: String(s.prodi || 'Ilmu Hukum'),
+          angkatan: String(s.angkatan || '2021'),
+          noHp: s.noHp !== undefined && s.noHp !== null ? String(s.noHp) : '',
+          email: String(s.email || ''),
+          jenisKelamin: s.jenisKelamin === 'P' ? 'P' : 'L',
+          semester: String(s.semester || ''),
+          courseIds: parsedCourseIds,
+        };
+      });
+
+      // Sanitize courses from Sheets (preserve exact user-defined 'kelas' without overriding)
+      const rawCourses = Array.isArray(result.courses) ? result.courses : [];
+      const courses: Course[] = rawCourses.map((c: any, idx: number) => {
+        let cleanedKelas = String(c.kelas || '').trim();
+        // If 'kelas' contains ISO date string like "2026-08-01T17:00:00.000Z" or is empty
+        if (!cleanedKelas || /^\d{4}-\d{2}-\d{2}/.test(cleanedKelas) || cleanedKelas.includes('T') || cleanedKelas.includes('00:00')) {
+          cleanedKelas = 'Kelas A';
+        }
+
+        let cleanedSemester = String(c.semester || '').trim();
+        if (!cleanedSemester || /^\d{4}-\d{2}-\d{2}/.test(cleanedSemester) || cleanedSemester.includes('2024/2025')) {
+          cleanedSemester = 'Semester Ganjil 2026/2027';
+        }
+
+        let meetings = c.meetings;
+        if (typeof meetings === 'string') {
+          try { meetings = JSON.parse(meetings); } catch (e) { meetings = []; }
+        }
+        if (!Array.isArray(meetings) || meetings.length === 0) {
+          // Provide default 14 meetings if missing
+          meetings = Array.from({ length: 14 }, (_, mIdx) => ({
+            meetingNumber: mIdx + 1,
+            date: '',
+            topic: `Pertemuan ${mIdx + 1}: Pembahasan Materi Pokok ${mIdx + 1}`,
+            mode: 'Tatap Muka',
+            dosenHadir: true,
+            isCompleted: true,
+          }));
+        }
+
+        let gradeWeights = c.gradeWeights;
+        if (typeof gradeWeights === 'string') {
+          try { gradeWeights = JSON.parse(gradeWeights); } catch (e) { gradeWeights = null; }
+        }
+        if (!gradeWeights || typeof gradeWeights !== 'object') {
+          gradeWeights = {
+            kehadiran: 10,
+            tugas: 20,
+            kuis: 10,
+            uts: 30,
+            uas: 30,
+          };
+        }
+
+        return {
+          id: String(c.id || `crs-${Date.now()}-${idx}`),
+          kode: String(c.kode || `HKM-${100 + idx}`),
+          nama: String(c.nama || `Mata Kuliah ${idx + 1}`),
+          sks: Number(c.sks) || 3,
+          semester: cleanedSemester,
+          kelas: cleanedKelas,
+          dosenPengampu: String(c.dosenPengampu || 'Dosen Pengampu'),
+          nipDosen: String(c.nipDosen || '-'),
+          ruangan: String(c.ruangan || 'Gedung A - Ruang 204'),
+          jadwalHari: String(c.jadwalHari || 'Senin'),
+          jamMulai: String(c.jamMulai || '08:00'),
+          jamSelesai: String(c.jamSelesai || '10:30'),
+          minAttendancePercent: Number(c.minAttendancePercent) || 75,
+          meetings,
+          gradeWeights,
+        };
+      });
+
+      // Sanitize schedules
+      const rawSchedules = Array.isArray(result.schedules) ? result.schedules : [];
+      const schedules: ScheduleItem[] = rawSchedules.map((s: any, idx: number) => {
+        let cleanedKelas = String(s.kelas || '').trim();
+        if (!cleanedKelas || /^\d{4}-\d{2}-\d{2}/.test(cleanedKelas) || cleanedKelas.includes('T')) {
+          cleanedKelas = 'Kelas A';
+        }
+        return {
+          id: String(s.id || `sch-${Date.now()}-${idx}`),
+          courseId: String(s.courseId || ''),
+          namaMK: String(s.namaMK || ''),
+          kodeMK: String(s.kodeMK || ''),
+          sks: Number(s.sks) || 3,
+          hari: s.hari || 'Senin',
+          jamMulai: String(s.jamMulai || '08:00'),
+          jamSelesai: String(s.jamSelesai || '10:30'),
+          ruangan: String(s.ruangan || 'Gedung A'),
+          dosen: String(s.dosen || '-'),
+          kelas: cleanedKelas,
+          warna: String(s.warna || 'blue'),
+        };
+      });
+
+      // Parse Users / Pengguna sheet
+      const rawUsers = Array.isArray(result.users) ? result.users : [];
+      const users: UserAccount[] = rawUsers.map((u: any, idx: number) => {
+        const rawRole = String(u.role || '').toLowerCase();
+        const role = rawRole.includes('admin') ? 'admin' : rawRole.includes('dosen') ? 'dosen' : 'mahasiswa';
+        return {
+          id: String(u.id || `usr-gs-${idx}`),
+          username: String(u.username || u.nim || u.nipOrNim || `user${idx}`),
+          password: u.password ? String(u.password) : undefined,
+          nama: String(u.nama || 'Pengguna SIAKAD'),
+          role,
+          email: String(u.email || ''),
+          nipOrNim: String(u.nipOrNim || u.nip || u.nim || ''),
+          prodi: String(u.prodi || 'Ilmu Hukum'),
+          dosenName: u.dosenName ? String(u.dosenName) : undefined,
+          studentId: u.studentId ? String(u.studentId) : undefined,
+          nim: u.nim ? String(u.nim) : undefined,
+        };
+      });
 
       // Reconstruct attendanceMap from flattened array if needed
       const attendanceMap: StudentAttendanceMap = {};
@@ -112,13 +290,10 @@ export async function fetchDataFromGoogleSheets(url: string): Promise<{
           attendanceMap,
           grades,
           schedules,
+          users,
         }
       };
-    }
-
-    return { success: false, message: result.message || 'Gagal memuat data dari Google Sheets.' };
   } catch (error: any) {
-    console.error('Error fetching from Google Sheets:', error);
     return {
       success: false,
       message: `Gagal memuat data dari Google Sheets: ${error?.message || 'Periksa koneksi atau URL Apps Script'}`
@@ -134,6 +309,7 @@ export async function pushDataToGoogleSheets(
     attendanceMap: StudentAttendanceMap;
     grades: Record<string, Record<string, StudentGrade>>;
     schedules: ScheduleItem[];
+    users?: UserAccount[];
   }
 ): Promise<{ success: boolean; message: string }> {
   if (!url || !url.trim().startsWith('http')) {
@@ -167,6 +343,7 @@ export async function pushDataToGoogleSheets(
       attendance: flatAttendance,
       grades: flatGrades,
       schedules: payload.schedules,
+      users: payload.users || [],
     };
 
     try {
@@ -208,3 +385,4 @@ export async function pushDataToGoogleSheets(
     };
   }
 }
+

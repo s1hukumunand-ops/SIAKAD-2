@@ -1,6 +1,6 @@
 {
   "name": "Sistem Rekap Perkuliahan Mahasiswa",
-  "description": "Aplikasi rekap perkuliahan mahasiswa dengan manajemen absensi 14 pertemuan, sistem peringatan otomatis kehadiran minimal, input nilai multi-komponen, jadwal kuliah, serta panduan & konektor Google Sheets API.",
+  "description": "Aplikasi rekap perkuliahan mahasiswa dengan multi-login (Admin, Dosen Pengampu, dan Portal Mahasiswa Read-Only), manajemen absensi 14 pertemuan, input nilai multi-komponen & bobot mutu, sistem peringatan WhatsApp, jadwal kuliah, serta ekspor laporan akademik & Google Sheets sync.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

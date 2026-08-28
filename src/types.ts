@@ -9,6 +9,8 @@ export interface Student {
   noHp: string;
   email: string;
   jenisKelamin: 'L' | 'P';
+  semester?: string;
+  courseIds?: string[];
 }
 
 export interface MeetingInfo {
@@ -98,6 +100,7 @@ export interface ScheduleItem {
   namaMK: string;
   kodeMK: string;
   sks: number;
+  semester?: string;
   hari: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu';
   jamMulai: string;
   jamSelesai: string;
@@ -116,3 +119,26 @@ export interface GoogleSheetsSyncConfig {
   status: 'idle' | 'testing' | 'syncing' | 'success' | 'error';
   errorMessage?: string;
 }
+
+export type UserRole = 'admin' | 'dosen' | 'mahasiswa';
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  password?: string;
+  nama: string;
+  role: UserRole;
+  email: string;
+  nipOrNim?: string;
+  prodi?: string;
+  avatarUrl?: string;
+  // Specific to Dosen
+  dosenName?: string;
+  // Specific to Mahasiswa
+  studentId?: string;
+  nim?: string;
+}
+
+export interface AuthUser extends UserAccount {}
+
+

@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { MeetingInfo } from '../types';
-import { Calendar, X, Save } from 'lucide-react';
+import { Calendar, X, Sparkles, CheckSquare } from 'lucide-react';
+import { formatIndoDate, generateConsecutiveMeetingDates } from '../utils/dateUtils';
 
 interface MeetingEditModalProps {
   isOpen: boolean;
   meeting: MeetingInfo | null;
+  allMeetings?: MeetingInfo[];
   onClose: () => void;
-  onSave: (meeting: MeetingInfo) => void;
+  onSave: (meeting: MeetingInfo, updatedAllMeetings?: MeetingInfo[]) => void;
 }
 
 export const MeetingEditModal: React.FC<MeetingEditModalProps> = ({
   isOpen,
   meeting,
+  allMeetings = [],
   onClose,
   onSave,
 }) => {
@@ -19,6 +22,7 @@ export const MeetingEditModal: React.FC<MeetingEditModalProps> = ({
   const [topic, setTopic] = useState('');
   const [mode, setMode] = useState<'Tatap Muka' | 'Daring' | 'Hybrid'>('Tatap Muka');
   const [notes, setNotes] = useState('');
+  const [autoShiftNext, setAutoShiftNext] = useState(true);
 
   useEffect(() => {
     if (meeting) {
@@ -26,6 +30,8 @@ export const MeetingEditModal: React.FC<MeetingEditModalProps> = ({
       setTopic(meeting.topic || '');
       setMode(meeting.mode || 'Tatap Muka');
       setNotes(meeting.notes || '');
+      // Only default auto shift if not the last meeting
+      setAutoShiftNext(meeting.meetingNumber < 14);
     }
   }, [meeting]);
 
@@ -33,29 +39,60 @@ export const MeetingEditModal: React.FC<MeetingEditModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({
+
+    const updatedCurrent: MeetingInfo = {
       ...meeting,
       date,
       topic,
       mode,
       notes,
-    });
+    };
+
+    if (autoShiftNext && date && allMeetings.length > 0) {
+      // Generate consecutive dates for subsequent meetings
+      const remainingCount = 14 - meeting.meetingNumber + 1;
+      const consecutiveDates = generateConsecutiveMeetingDates(date, remainingCount);
+
+      const updatedAll = allMeetings.map((m) => {
+        if (m.meetingNumber < meeting.meetingNumber) {
+          return m;
+        }
+        if (m.meetingNumber === meeting.meetingNumber) {
+          return updatedCurrent;
+        }
+        const offsetIndex = m.meetingNumber - meeting.meetingNumber;
+        return {
+          ...m,
+          date: consecutiveDates[offsetIndex] || m.date,
+        };
+      });
+
+      onSave(updatedCurrent, updatedAll);
+    } else {
+      onSave(updatedCurrent);
+    }
+
     onClose();
   };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-blue-600" />
-            <h3 className="font-bold text-slate-900 text-base">
-              Edit Pertemuan ke-{meeting.meetingNumber}
-            </h3>
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">
+                Edit Pertemuan ke-{meeting.meetingNumber}
+              </h3>
+              <p className="text-[11px] text-slate-500">Atur tanggal, topik materi perkuliahan, dan mode tatap muka</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+            className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
           >
             &times;
           </button>
@@ -63,16 +100,43 @@ export const MeetingEditModal: React.FC<MeetingEditModalProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              Tanggal Pelaksanaan
+            <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+              <span>Tanggal Pelaksanaan *</span>
+              {date && (
+                <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                  {formatIndoDate(date)}
+                </span>
+              )}
             </label>
             <input
               type="date"
+              required
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {meeting.meetingNumber < 14 && (
+            <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoShiftNext}
+                  onChange={(e) => setAutoShiftNext(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                />
+                <div>
+                  <span className="font-semibold text-blue-900 block text-xs">
+                    Sesuaikan otomatis tanggal pertemuan berikutnya (P{meeting.meetingNumber + 1} s/d P14)
+                  </span>
+                  <span className="text-[11px] text-blue-700 block mt-0.5 leading-relaxed">
+                    Setiap pertemuan berikutnya otomatis ditambah 7 hari (+1 minggu) berturut-turut.
+                  </span>
+                </div>
+              </label>
+            </div>
+          )}
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
@@ -91,10 +155,11 @@ export const MeetingEditModal: React.FC<MeetingEditModalProps> = ({
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
-              Pokok Bahasan / Topik Materi Kuliah
+              Pokok Bahasan / Topik Silabus Perkuliahan *
             </label>
             <textarea
               rows={3}
+              required
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder="Contoh: Hukum Acara Mahkamah Konstitusi & Pengujian UU (Judicial Review)"

@@ -1,5 +1,34 @@
 import { Student, Course, AttendanceStatus, StudentAttendanceSummary, CalculatedGrade, StudentGrade } from '../types';
 
+/**
+ * Filter students based on current Course and Semester
+ */
+export function getCourseStudents(students: Student[], course: Course | null | undefined, activeSemester?: string): Student[] {
+  if (!students || students.length === 0 || !course) return [];
+
+  // If activeSemester is active and course semester does not match, return empty
+  if (activeSemester && activeSemester !== 'Semua Semester' && course.semester && course.semester !== activeSemester) {
+    return [];
+  }
+
+  return students.filter((std) => {
+    // If activeSemester is active and student has a semester that does not match, exclude
+    if (activeSemester && activeSemester !== 'Semua Semester' && std.semester && std.semester !== activeSemester) {
+      return false;
+    }
+
+    // 1. If student has explicit courseIds array, only include if enrolled in this course
+    if (Array.isArray(std.courseIds) && std.courseIds.length > 0) {
+      return std.courseIds.includes(course.id);
+    }
+    // 2. If student has single legacy courseId
+    if ((std as any).courseId) {
+      return (std as any).courseId === course.id;
+    }
+    return false;
+  });
+}
+
 export function calculateAttendanceSummary(
   student: Student,
   course: Course,
@@ -19,17 +48,18 @@ export function calculateAttendanceSummary(
     else if (status === 'A') alpa++;
   }
 
-  // Count completed meetings in course
-  const completedMeetings = course.meetings.filter(m => m.isCompleted).length || 14;
+  // Count completed meetings in course safely
+  const meetingsList = Array.isArray(course?.meetings) ? course.meetings : [];
+  const completedMeetings = meetingsList.filter(m => m && m.isCompleted).length || 14;
   const totalMeetingsHeld = Math.max(1, completedMeetings);
 
   // In standard Indonesian universities, attendance percentage is usually:
   // (Hadir + (0.5 * (Izin + Sakit))) / Total or pure Hadir / Total.
-  // Standard strict: Hadir / Total meetings held * 100 (or Hadir / 14 * 100)
-  const attendanceScore = hadir + (izin * 0.5) + (sakit * 0.5); // Standard academic leeway
+  // Standard academic leeway
+  const attendanceScore = hadir + (izin * 0.5) + (sakit * 0.5);
   const percentage = Math.min(100, Math.round((attendanceScore / totalMeetingsHeld) * 100));
 
-  const minPercent = course.minAttendancePercent || 75;
+  const minPercent = course?.minAttendancePercent || 75;
   // Maximum absence allowed across 14 meetings for 75% rule: 14 * 0.25 = 3.5 => 3 meetings maximum
   const maxAbsenceAllowed = Math.floor(14 * (1 - minPercent / 100));
   const remainingAbsence = Math.max(0, maxAbsenceAllowed - alpa);
@@ -163,26 +193,35 @@ export function generateWarningWhatsAppMessage(
     ? `⚠️ *PERINGATAN KRITIS KEHADIRAN KULIAH (PENCEKALAN UAS)*`
     : `📢 *INFORMASI & PERINGATAN REKAP KEHADIRAN KULIAH*`;
 
-  const cleanPhone = student.noHp.replace(/[^0-9]/g, '');
-  const formattedPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+  const rawPhone = student?.noHp !== undefined && student?.noHp !== null ? String(student.noHp) : '';
+  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+  const formattedPhone = cleanPhone.startsWith('0')
+    ? '62' + cleanPhone.slice(1)
+    : cleanPhone.startsWith('62')
+      ? cleanPhone
+      : cleanPhone ? '62' + cleanPhone : '';
+
+  const studentName = student?.nama || 'Mahasiswa';
+  const studentNim = student?.nim || '-';
+  const studentProdi = student?.prodi || '-';
 
   const text = `${header}
 
-Yth. Sdr/i *${student.nama}*
-NIM: *${student.nim}*
-Program Studi: ${student.prodi}
+Yth. Sdr/i *${studentName}*
+NIM: *${studentNim}*
+Program Studi: ${studentProdi}
 
 Melalui pemberitahuan ini disampaikan rekapitulasi kehadiran Anda pada:
-📚 *Mata Kuliah:* ${course.nama} (${course.kode})
-👨‍🏫 *Dosen Pengampu:* ${course.dosenPengampu}
-🗓️ *Kelas / Semester:* ${course.kelas} / ${course.semester}
+📚 *Mata Kuliah:* ${course?.nama || ''} (${course?.kode || ''})
+👨‍🏫 *Dosen Pengampu:* ${course?.dosenPengampu || ''}
+🗓️ *Kelas / Semester:* ${course?.kelas || ''} / ${course?.semester || ''}
 
 📊 *Rincian Kehadiran (14 Pertemuan):*
 - Hadir: ${summary.hadir} kali
 - Izin: ${summary.izin} kali
 - Sakit: ${summary.sakit} kali
 - Alpa (Tanpa Keterangan): *${summary.alpa} kali*
-- Persentase Kehadiran: *${summary.percentage}%* (Standar Minimal: ${course.minAttendancePercent}%)
+- Persentase Kehadiran: *${summary.percentage}%* (Standar Minimal: ${course?.minAttendancePercent || 75}%)
 
 ${isCritical
   ? `❌ *STATUS: TIDAK MEMENUHI SYARAT KEHADIRAN (DICEKAL UAS)*
@@ -194,6 +233,9 @@ Persentase kehadiran Anda mendekati batas minimal. Mohon memastikan kehadiran pa
 Terima kasih atas perhatian dan kerja samanya.
 _Sistem Informasi Rekap Perkuliahan & Absensi_`;
 
+  if (!formattedPhone) {
+    return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  }
   return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`;
 }
 

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Course, Student, StudentAttendanceMap, StudentGrade } from '../types';
-import { calculateAttendanceSummary, calculateGrade } from '../utils/calculations';
+import { calculateAttendanceSummary, calculateGrade, getCourseStudents } from '../utils/calculations';
+import { SEMESTER_OPTIONS, DEFAULT_ACTIVE_SEMESTER } from '../utils/dateUtils';
 import { 
   Printer, 
   Download, 
@@ -8,7 +9,8 @@ import {
   FileText, 
   X, 
   AlertTriangle, 
-  CheckCircle2 
+  CheckCircle2,
+  Calendar
 } from 'lucide-react';
 
 interface ReportExportModalProps {
@@ -18,6 +20,7 @@ interface ReportExportModalProps {
   students: Student[];
   attendanceMap: StudentAttendanceMap;
   grades: Record<string, Record<string, StudentGrade>>;
+  activeSemester?: string;
 }
 
 export const ReportExportModal: React.FC<ReportExportModalProps> = ({
@@ -27,24 +30,49 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
   students,
   attendanceMap,
   grades,
+  activeSemester,
 }) => {
   const [reportType, setReportType] = useState<'attendance' | 'grades' | 'barred'>('attendance');
+  const [customSemester, setCustomSemester] = useState(
+    activeSemester && activeSemester !== 'Semua Semester'
+      ? activeSemester
+      : (course.semester || DEFAULT_ACTIVE_SEMESTER)
+  );
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (activeSemester && activeSemester !== 'Semua Semester') {
+      setCustomSemester(activeSemester);
+    } else if (course?.semester) {
+      setCustomSemester(course.semester);
+    }
+  }, [activeSemester, course?.semester, isOpen]);
 
+  const currentSemesterDisplay = customSemester || course.semester || activeSemester || DEFAULT_ACTIVE_SEMESTER;
   const courseAttendance = attendanceMap[course.id] || {};
   const courseGrades = grades[course.id] || {};
 
-  const summaries = students.map((std) => 
-    calculateAttendanceSummary(std, course, courseAttendance[std.id])
-  );
+  const courseStudents = useMemo(() => {
+    return getCourseStudents(students, course, currentSemesterDisplay);
+  }, [students, course, currentSemesterDisplay]);
 
-  const calculatedGrades = students.map((std) => {
-    const summary = summaries.find((s) => s.student.id === std.id)!;
-    return calculateGrade(std, course, courseGrades[std.id], summary);
-  });
+  const summaries = useMemo(() => {
+    return courseStudents.map((std) => 
+      calculateAttendanceSummary(std, course, courseAttendance[std.id])
+    );
+  }, [courseStudents, course, courseAttendance]);
 
-  const barredStudents = summaries.filter((s) => !s.isEligibleForExam);
+  const calculatedGrades = useMemo(() => {
+    return courseStudents.map((std) => {
+      const summary = summaries.find((s) => s.student.id === std.id)!;
+      return calculateGrade(std, course, courseGrades[std.id], summary);
+    });
+  }, [courseStudents, course, courseGrades, summaries]);
+
+  const barredStudents = useMemo(() => {
+    return summaries.filter((s) => !s.isEligibleForExam);
+  }, [summaries]);
+
+  if (!isOpen) return null;
 
   const handleExportCSV = () => {
     let csvContent = 'data:text/csv;charset=utf-8,';
@@ -80,10 +108,10 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-      <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in print:p-0 print:bg-transparent print:static print:inset-auto">
+      <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col print:shadow-none print:border-none print:p-0 print:max-h-none print:w-full print:max-w-none print:bg-transparent">
         {/* Modal Top Bar */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-shrink-0">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <Printer className="w-5 h-5 text-blue-600" />
             <div>
@@ -100,32 +128,49 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
         </div>
 
         {/* Report Switcher & Export Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-slate-100 flex-shrink-0">
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            <button
-              onClick={() => setReportType('attendance')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                reportType === 'attendance' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Rekap Presensi 14 Pertemuan
-            </button>
-            <button
-              onClick={() => setReportType('grades')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                reportType === 'grades' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Daftar Nilai Akhir (DPNA)
-            </button>
-            <button
-              onClick={() => setReportType('barred')}
-              className={`px-3 py-1.5 rounded-lg transition ${
-                reportType === 'barred' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600 hover:text-rose-600'
-              }`}
-            >
-              Daftar Pencekalan UAS ({barredStudents.length})
-            </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-slate-100 flex-shrink-0 print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+              <button
+                onClick={() => setReportType('attendance')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  reportType === 'attendance' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Rekap Presensi 14 Pertemuan
+              </button>
+              <button
+                onClick={() => setReportType('grades')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  reportType === 'grades' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Daftar Nilai Akhir (DPNA)
+              </button>
+              <button
+                onClick={() => setReportType('barred')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  reportType === 'barred' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600 hover:text-rose-600'
+                }`}
+              >
+                Daftar Pencekalan UAS ({barredStudents.length})
+              </button>
+            </div>
+
+            {/* Semester Selector on Report */}
+            <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl text-xs">
+              <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="font-semibold text-blue-900">Semester:</span>
+              <select
+                value={currentSemesterDisplay}
+                onChange={(e) => setCustomSemester(e.target.value)}
+                className="bg-transparent font-bold text-blue-950 focus:outline-none cursor-pointer"
+              >
+                {SEMESTER_OPTIONS.map((sem) => (
+                  <option key={sem} value={sem}>{sem}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -148,12 +193,12 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
         </div>
 
         {/* Printable Paper Canvas Preview */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 border border-slate-200 rounded-xl my-4 text-xs font-serif text-slate-900 space-y-4 print:p-0 print:border-none print:bg-white">
+        <div id="printable-report" className="flex-1 overflow-y-auto p-6 bg-slate-50 border border-slate-200 rounded-xl my-4 text-xs font-serif text-slate-900 space-y-4 print:p-0 print:border-none print:bg-white print:overflow-visible print:m-0">
           
           {/* Header Kop Surat */}
           <div className="text-center border-b-2 border-slate-900 pb-3">
             <h3 className="text-xs font-bold uppercase tracking-wider">KEMENTERIAN PENDIDIKAN TINGGI, SAINS DAN TEKNOLOGI</h3>
-            <h2 className="text-base font-black uppercase">UNIVERSITAS NEGERI INDONESIA</h2>
+            <h2 className="text-base font-black uppercase">UNIVERSITAS ANDALAS</h2>
             <p className="text-[11px] font-sans font-semibold text-slate-700">FAKULTAS HUKUM • PROGRAM STUDI S1 ILMU HUKUM</p>
             <p className="text-[10px] font-sans text-slate-500">Kampus Limau Manis, Padang 25163 • Laman: https://unand.ac.id</p>
           </div>
@@ -165,7 +210,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
               {reportType === 'grades' && 'DAFTAR PESERTA DAN NILAI AKHIR (DPNA)'}
               {reportType === 'barred' && 'BERITA ACARA PENCEKALAN UJIAN AKHIR SEMESTER (UAS) KARENA KEHADIRAN < 75%'}
             </h4>
-            <p className="text-[11px] text-slate-600 mt-0.5">{course.semester}</p>
+            <p className="text-[11px] text-blue-900 font-bold mt-0.5">{currentSemesterDisplay}</p>
           </div>
 
           {/* Course Metadata Grid */}
@@ -196,27 +241,35 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {summaries.map((s, idx) => (
-                    <tr key={s.student.id} className="border-b border-slate-200">
-                      <td className="p-1 text-center border border-slate-300">{idx + 1}</td>
-                      <td className="p-1 border border-slate-300 font-semibold">
-                        {s.student.nama} <span className="font-mono text-[9px] text-slate-500">({s.student.nim})</span>
-                      </td>
-                      {Array.from({ length: 14 }, (_, i) => (
-                        <td key={i} className="p-1 text-center border border-slate-300 font-bold">
-                          {courseAttendance[s.student.id]?.[i + 1] || '-'}
-                        </td>
-                      ))}
-                      <td className="p-1 text-center border border-slate-300 font-bold text-emerald-700">{s.hadir}</td>
-                      <td className="p-1 text-center border border-slate-300">{s.izin}</td>
-                      <td className="p-1 text-center border border-slate-300">{s.sakit}</td>
-                      <td className="p-1 text-center border border-slate-300 font-bold text-rose-700">{s.alpa}</td>
-                      <td className="p-1 text-center border border-slate-300 font-bold">{s.percentage}%</td>
-                      <td className="p-1 text-center border border-slate-300 font-semibold">
-                        {s.isEligibleForExam ? 'Memenuhi Syarat' : 'DICEKAL'}
+                  {summaries.length === 0 ? (
+                    <tr>
+                      <td colSpan={23} className="p-8 text-center text-slate-500 font-semibold bg-slate-50 border border-slate-300">
+                        Data mahasiswa belum tersedia pada mata kuliah dan semester yang dipilih ({currentSemesterDisplay}).
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    summaries.map((s, idx) => (
+                      <tr key={s.student.id} className="border-b border-slate-200">
+                        <td className="p-1 text-center border border-slate-300">{idx + 1}</td>
+                        <td className="p-1 border border-slate-300 font-semibold">
+                          {s.student.nama} <span className="font-mono text-[9px] text-slate-500">({s.student.nim})</span>
+                        </td>
+                        {Array.from({ length: 14 }, (_, i) => (
+                          <td key={i} className="p-1 text-center border border-slate-300 font-bold">
+                            {courseAttendance[s.student.id]?.[i + 1] || '-'}
+                          </td>
+                        ))}
+                        <td className="p-1 text-center border border-slate-300 font-bold text-emerald-700">{s.hadir}</td>
+                        <td className="p-1 text-center border border-slate-300">{s.izin}</td>
+                        <td className="p-1 text-center border border-slate-300">{s.sakit}</td>
+                        <td className="p-1 text-center border border-slate-300 font-bold text-rose-700">{s.alpa}</td>
+                        <td className="p-1 text-center border border-slate-300 font-bold">{s.percentage}%</td>
+                        <td className="p-1 text-center border border-slate-300 font-semibold">
+                          {s.isEligibleForExam ? 'Memenuhi Syarat' : 'DICEKAL'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -243,22 +296,30 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {calculatedGrades.map((g, idx) => (
-                    <tr key={g.student.id} className="border-b border-slate-200">
-                      <td className="p-1 text-center border border-slate-300">{idx + 1}</td>
-                      <td className="p-1 border border-slate-300 font-mono">{g.student.nim}</td>
-                      <td className="p-1 border border-slate-300 font-semibold">{g.student.nama}</td>
-                      <td className="p-1 text-center border border-slate-300">{g.kehadiranScore}</td>
-                      <td className="p-1 text-center border border-slate-300">{g.tugas}</td>
-                      <td className="p-1 text-center border border-slate-300">{g.kuis}</td>
-                      <td className="p-1 text-center border border-slate-300">{g.uts}</td>
-                      <td className="p-1 text-center border border-slate-300">{g.uas}</td>
-                      <td className="p-1 text-center border border-slate-300 font-bold">{g.nilaiAkhir.toFixed(1)}</td>
-                      <td className="p-1 text-center border border-slate-300 font-bold">{g.hurufMutu}</td>
-                      <td className="p-1 text-center border border-slate-300 font-mono">{g.angkaMutu.toFixed(2)}</td>
-                      <td className="p-1 text-center border border-slate-300 font-semibold">{g.statusKelulusan}</td>
+                  {calculatedGrades.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} className="p-8 text-center text-slate-500 font-semibold bg-slate-50 border border-slate-300">
+                        Data nilai mahasiswa belum tersedia pada mata kuliah dan semester yang dipilih ({currentSemesterDisplay}).
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    calculatedGrades.map((g, idx) => (
+                      <tr key={g.student.id} className="border-b border-slate-200">
+                        <td className="p-1 text-center border border-slate-300">{idx + 1}</td>
+                        <td className="p-1 border border-slate-300 font-mono">{g.student.nim}</td>
+                        <td className="p-1 border border-slate-300 font-semibold">{g.student.nama}</td>
+                        <td className="p-1 text-center border border-slate-300">{g.kehadiranScore}</td>
+                        <td className="p-1 text-center border border-slate-300">{g.tugas}</td>
+                        <td className="p-1 text-center border border-slate-300">{g.kuis}</td>
+                        <td className="p-1 text-center border border-slate-300">{g.uts}</td>
+                        <td className="p-1 text-center border border-slate-300">{g.uas}</td>
+                        <td className="p-1 text-center border border-slate-300 font-bold">{g.nilaiAkhir.toFixed(1)}</td>
+                        <td className="p-1 text-center border border-slate-300 font-bold">{g.hurufMutu}</td>
+                        <td className="p-1 text-center border border-slate-300 font-mono">{g.angkaMutu.toFixed(2)}</td>
+                        <td className="p-1 text-center border border-slate-300 font-semibold">{g.statusKelulusan}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -309,13 +370,13 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
           )}
 
           {/* Official Signatures */}
-          <div className="pt-6 flex justify-between font-sans text-xs">
+          <div className="pt-6 flex justify-between font-sans text-xs print-avoid-break">
             <div>
-              <p>Mengetahui,</p>
-              <p className="font-semibold">Ketua Jurusan / Program Studi</p>
+              <p></p>
+              <p className="font-semibold"></p>
               <div className="h-16" />
-              <p className="font-bold underline">Dr. Kurnia Warman, S.H., M.Hum.</p>
-              <p className="text-[10px] text-slate-500 font-mono">NIP. 197205151998021001</p>
+              <p className="font-bold underline"></p>
+              <p className="text-[10px] text-slate-500 font-mono"></p>
             </div>
 
             <div className="text-right">
@@ -329,7 +390,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
         </div>
 
         {/* Modal Bottom Actions */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 flex-shrink-0">
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 flex-shrink-0 print:hidden">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs"

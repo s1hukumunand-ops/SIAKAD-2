@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { GoogleSheetsSyncConfig, Student, Course, StudentAttendanceMap, StudentGrade, ScheduleItem } from '../types';
+import React, { useState, useMemo } from 'react';
+import { GoogleSheetsSyncConfig, Student, Course, StudentAttendanceMap, StudentGrade, ScheduleItem, UserAccount } from '../types';
 import { googleAppsScriptTemplate } from '../data/initialData';
 import { testAppsScriptConnection, pushDataToGoogleSheets } from '../services/googleSheetService';
+import { getAllUserAccounts } from '../utils/authData';
 import { 
   Cloud, 
   CheckCircle2, 
@@ -17,7 +18,12 @@ import {
   HelpCircle,
   Sparkles,
   Layers,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck,
+  GraduationCap,
+  Users,
+  KeyRound,
+  Send
 } from 'lucide-react';
 
 interface GoogleSheetIntegrationTabProps {
@@ -28,6 +34,7 @@ interface GoogleSheetIntegrationTabProps {
   attendanceMap: StudentAttendanceMap;
   grades: Record<string, Record<string, StudentGrade>>;
   schedules: ScheduleItem[];
+  userAccounts?: UserAccount[];
   onImportData: (data: any) => void;
   onPullDataFromSheets: (url: string) => Promise<void>;
 }
@@ -40,6 +47,7 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
   attendanceMap,
   grades,
   schedules,
+  userAccounts,
   onImportData,
   onPullDataFromSheets,
 }) => {
@@ -47,8 +55,21 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
   const [copiedCode, setCopiedCode] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncingUsers, setIsSyncingUsers] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
+  // Derive all active user accounts dynamically
+  const allDerivedUsers = useMemo(() => {
+    return getAllUserAccounts(courses, students, userAccounts);
+  }, [courses, students, userAccounts]);
+
+  const userStats = useMemo(() => {
+    const adminCount = allDerivedUsers.filter(u => u.role === 'admin').length;
+    const dosenCount = allDerivedUsers.filter(u => u.role === 'dosen').length;
+    const mhsCount = allDerivedUsers.filter(u => u.role === 'mahasiswa').length;
+    return { adminCount, dosenCount, mhsCount, total: allDerivedUsers.length };
+  }, [allDerivedUsers]);
 
   React.useEffect(() => {
     if (config.webAppUrl && config.webAppUrl !== urlInput) {
@@ -95,7 +116,7 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
 
     try {
       await onPullDataFromSheets(urlInput.trim());
-      setFeedback({ type: 'success', message: 'Data terbaru berhasil dimuat & disinkronkan dari Google Sheets!' });
+      setFeedback({ type: 'success', message: 'Data terbaru (termasuk Akun Pengguna) berhasil dimuat & disinkronkan dari Google Sheets!' });
     } catch (err: any) {
       setFeedback({ type: 'error', message: err?.message || 'Gagal menarik data dari Google Sheets.' });
     } finally {
@@ -119,17 +140,51 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
       attendanceMap,
       grades,
       schedules,
+      users: allDerivedUsers,
     });
 
     setIsSyncing(false);
 
     if (result.success) {
       const now = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      setFeedback({ type: 'success', message: `${result.message} (Terakhir sinkron: ${now})` });
+      setFeedback({ type: 'success', message: `${result.message} (Termasuk ${allDerivedUsers.length} akun pengguna pada tab Pengguna. Terakhir sinkron: ${now})` });
       onUpdateConfig({ status: 'success', lastSyncedAt: now });
     } else {
       setFeedback({ type: 'error', message: result.message });
       onUpdateConfig({ status: 'error', errorMessage: result.message });
+    }
+  };
+
+  const handleInitializeAndPushUsersOnly = async () => {
+    if (!urlInput.trim()) {
+      setFeedback({ type: 'error', message: 'Masukkan URL Google Apps Script terlebih dahulu.' });
+      return;
+    }
+
+    setIsSyncingUsers(true);
+    setFeedback(null);
+
+    const result = await pushDataToGoogleSheets(urlInput.trim(), {
+      students,
+      courses,
+      attendanceMap,
+      grades,
+      schedules,
+      users: allDerivedUsers,
+    });
+
+    setIsSyncingUsers(false);
+
+    if (result.success) {
+      setFeedback({
+        type: 'success',
+        message: `Berhasil! Sebanyak ${allDerivedUsers.length} akun pengguna (1 Admin, ${userStats.dosenCount} Dosen, ${userStats.mhsCount} Mahasiswa) telah berhasil disimpan ke lembar "Pengguna" di Google Sheets Anda!`
+      });
+    } else {
+      setFeedback({
+        type: 'error',
+        message: `Gagal mengirim data akun pengguna: ${result.message}`
+      });
     }
   };
 
@@ -142,6 +197,7 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
       attendanceMap,
       grades,
       schedules,
+      users: allDerivedUsers,
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -208,6 +264,83 @@ export const GoogleSheetIntegrationTab: React.FC<GoogleSheetIntegrationTabProps>
               </span>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Direct User Accounts Initialization & FAQ Card */}
+      <div className="bg-gradient-to-br from-blue-900/10 via-white to-indigo-900/10 rounded-2xl p-6 border-2 border-blue-200/90 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shrink-0 mt-0.5">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 text-base">
+                  Database & Autentikasi Pengguna (Tab "Pengguna" di Google Sheets)
+                </h3>
+                <span className="bg-blue-100 text-blue-800 font-bold text-[10px] px-2 py-0.5 rounded-full border border-blue-200">
+                  {userStats.total} Akun Tersedia
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-1">
+                <strong>Pertanyaan:</strong> Apakah saya harus menginputkan data pengguna (username & password) secara manual terlebih dahulu di Google Sheets?
+              </p>
+              <p className="text-xs text-emerald-700 font-bold mt-0.5 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>JAWABAN: TIDAK PERLU! Sistem secara otomatis membuat akun login default untuk seluruh dosen & mahasiswa.</span>
+              </p>
+            </div>
+          </div>
+
+          <button
+            id="init-users-sheets-btn"
+            onClick={handleInitializeAndPushUsersOnly}
+            disabled={isSyncingUsers || !urlInput.trim()}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs px-4 py-3 rounded-xl shadow-md transition whitespace-nowrap shrink-0 disabled:opacity-60"
+          >
+            <Send className={`w-4 h-4 ${isSyncingUsers ? 'animate-spin' : ''}`} />
+            <span>{isSyncingUsers ? 'Mengirim Data Akun...' : 'Kirim Semua Akun ke Sheet "Pengguna"'}</span>
+          </button>
+        </div>
+
+        {/* Roles Breakdown Pills */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 text-xs">
+          <div className="p-3 bg-white/80 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2 text-slate-900 font-bold mb-1">
+              <ShieldCheck className="w-4 h-4 text-blue-600" />
+              <span>1 Akun Administrator</span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Username: <code className="font-mono bg-slate-100 px-1 rounded text-slate-800">admin</code> • Pass: <code className="font-mono bg-slate-100 px-1 rounded text-slate-800">admin123</code>
+            </p>
+          </div>
+
+          <div className="p-3 bg-white/80 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2 text-slate-900 font-bold mb-1">
+              <GraduationCap className="w-4 h-4 text-amber-600" />
+              <span>{userStats.dosenCount} Akun Dosen Pengampu</span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Username: <code className="font-mono bg-slate-100 px-1 rounded text-slate-800">NIP Dosen</code> • Pass: <code className="font-mono bg-slate-100 px-1 rounded text-slate-800">dosen123</code>
+            </p>
+          </div>
+
+          <div className="p-3 bg-white/80 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2 text-slate-900 font-bold mb-1">
+              <Users className="w-4 h-4 text-emerald-600" />
+              <span>{userStats.mhsCount} Akun Mahasiswa</span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Username: <code className="font-mono bg-slate-100 px-1 rounded text-slate-800">NIM Mahasiswa</code> • Pass: <code className="font-mono bg-slate-100 px-1 rounded text-slate-800">mhs123</code>
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
+          <p>
+            💡 <strong>Kustomisasi Kata Sandi & Pengguna Tambahan:</strong> Jika Anda ingin mengubah kata sandi atau menambahkan akun baru, Anda cukup mengedit baris pada tab sheet <code className="bg-white px-1.5 py-0.5 rounded font-mono font-bold text-slate-800 border border-slate-200">Pengguna</code> di Google Sheets Anda, lalu klik tombol <strong>"Tarik Data dari Sheets"</strong> di aplikasi ini.
+          </p>
         </div>
       </div>
 

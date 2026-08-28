@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Course, 
   Student, 
@@ -7,7 +7,9 @@ import {
   ScheduleItem, 
   GoogleSheetsSyncConfig, 
   MeetingInfo,
-  AttendanceStatus 
+  AttendanceStatus,
+  UserAccount,
+  AuthUser 
 } from './types';
 import { 
   initialStudents, 
@@ -22,6 +24,7 @@ import {
   demoSchedules
 } from './data/initialData';
 import { calculateAttendanceSummary } from './utils/calculations';
+import { DEFAULT_ACTIVE_SEMESTER } from './utils/dateUtils';
 import { 
   pushDataToGoogleSheets, 
   fetchDataFromGoogleSheets, 
@@ -41,9 +44,48 @@ import { StudentModal } from './components/StudentModal';
 import { CourseModal } from './components/CourseModal';
 import { MeetingEditModal } from './components/MeetingEditModal';
 import { ResetDataModal } from './components/ResetDataModal';
-import { CheckCircle2, RefreshCw, AlertCircle } from 'lucide-react';
+import { CourseSearchCommandModal } from './components/CourseSearchCommandModal';
+import { LoginModal } from './components/LoginModal';
+import { StudentPortalView } from './components/StudentPortalView';
+import { ADMIN_USER, isCourseTaughtByDosen, getAllUserAccounts } from './utils/authData';
+import { CheckCircle2, RefreshCw, AlertCircle, GraduationCap, ShieldCheck, UserCheck } from 'lucide-react';
 
 export default function App() {
+  // Authentication & Multi-Login User Session
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    const saved = localStorage.getItem('siakad_current_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return ADMIN_USER; // Default to Admin
+  });
+
+  const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('siakad_user_accounts');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('siakad_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('siakad_current_user');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem('siakad_user_accounts', JSON.stringify(userAccounts));
+  }, [userAccounts]);
+
   // State Initialization with LocalStorage Persistence
   const [courses, setCourses] = useState<Course[]>(() => {
     const saved = localStorage.getItem('siakad_courses');
@@ -55,9 +97,48 @@ export default function App() {
     return saved || (initialCourses[0]?.id || '');
   });
 
+  const [activeSemester, setActiveSemester] = useState<string>(() => {
+    const saved = localStorage.getItem('siakad_active_semester');
+    return saved || DEFAULT_ACTIVE_SEMESTER;
+  });
+
   const [students, setStudents] = useState<Student[]>(() => {
     const saved = localStorage.getItem('siakad_students');
-    return saved ? JSON.parse(saved) : initialStudents;
+    if (!saved) return initialStudents;
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed.map((s: any, idx: number) => {
+          let courseIds = s.courseIds;
+          if (typeof courseIds === 'string') {
+            try {
+              courseIds = JSON.parse(courseIds);
+            } catch {
+              courseIds = courseIds.split(',').map((x: string) => x.trim()).filter(Boolean);
+            }
+          }
+          if (!Array.isArray(courseIds)) {
+            courseIds = s.courseId ? [String(s.courseId)] : [];
+          }
+
+          return {
+            id: String(s.id || `std-${idx}`),
+            nim: String(s.nim || ''),
+            nama: String(s.nama || ''),
+            prodi: String(s.prodi || 'Ilmu Hukum'),
+            angkatan: String(s.angkatan || '2021'),
+            noHp: s.noHp !== undefined && s.noHp !== null ? String(s.noHp) : '',
+            email: String(s.email || ''),
+            jenisKelamin: s.jenisKelamin === 'P' ? 'P' : 'L',
+            semester: String(s.semester || ''),
+            courseIds: courseIds.map(String),
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('Error reading saved students:', e);
+    }
+    return initialStudents;
   });
 
   const [attendanceMap, setAttendanceMap] = useState<StudentAttendanceMap>(() => {
@@ -99,12 +180,42 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'attendance' | 'grades' | 'schedule' | 'warning' | 'googlesheets' | 'report'>('dashboard');
 
-  // Modals
+  // Modals & UI Controls
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<MeetingInfo | null>(null);
+
+  // Pinned / Favorite courses for quick access in 400+ courses database
+  const [pinnedCourseIds, setPinnedCourseIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem('siakad_pinned_courses');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('siakad_pinned_courses', JSON.stringify(pinnedCourseIds));
+  }, [pinnedCourseIds]);
+
+  const handleTogglePinCourse = (courseId: string) => {
+    setPinnedCourseIds((prev) =>
+      prev.includes(courseId) ? prev.filter((id) => id !== courseId) : [...prev, courseId]
+    );
+  };
+
+  // Global keyboard shortcut Ctrl+K / Cmd+K to open 400+ course search modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSearchModal((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Sync state & Notification toast
   const [isSyncing, setIsSyncing] = useState(false);
@@ -132,18 +243,26 @@ export default function App() {
     attendanceMap?: StudentAttendanceMap;
     grades?: Record<string, Record<string, StudentGrade>>;
     schedules?: ScheduleItem[];
+    users?: UserAccount[];
   }) => {
     const targetUrl = googleConfig.webAppUrl || DEFAULT_GOOGLE_APPS_SCRIPT_URL;
     if (!targetUrl || !targetUrl.startsWith('http')) return;
 
     setIsSyncing(true);
     try {
+      const activeUsers = getAllUserAccounts(
+        overrides?.courses ?? courses,
+        overrides?.students ?? students,
+        userAccounts
+      );
+
       const result = await pushDataToGoogleSheets(targetUrl, {
         students: overrides?.students ?? students,
         courses: overrides?.courses ?? courses,
         attendanceMap: overrides?.attendanceMap ?? attendanceMap,
         grades: overrides?.grades ?? grades,
         schedules: overrides?.schedules ?? schedules,
+        users: overrides?.users ?? activeUsers,
       });
 
       setIsSyncing(false);
@@ -215,6 +334,9 @@ export default function App() {
               if (result.data.schedules && result.data.schedules.length > 0) {
                 setSchedules(result.data.schedules);
               }
+              if (result.data.users && result.data.users.length > 0) {
+                setUserAccounts(result.data.users);
+              }
             } else {
               // If Sheets is empty, check if we have local student or schedule data to seed
               const savedStudents = localStorage.getItem('siakad_students');
@@ -228,6 +350,7 @@ export default function App() {
                   attendanceMap,
                   grades,
                   schedules: localSchedules,
+                  users: getAllUserAccounts(courses, localStudents, userAccounts),
                 });
               }
             }
@@ -283,8 +406,52 @@ export default function App() {
     localStorage.setItem('siakad_google_config', JSON.stringify(googleConfig));
   }, [googleConfig]);
 
-  // Current Course
-  const currentCourse = courses.find((c) => c.id === selectedCourseId) || courses[0];
+  // Filter courses based on user role (Dosen sees ONLY their courses; Mahasiswa sees enrolled courses; Admin sees all)
+  const effectiveCourses = useMemo(() => {
+    if (!currentUser || currentUser.role === 'admin') return courses;
+    if (currentUser.role === 'dosen') {
+      return courses.filter((c) => isCourseTaughtByDosen(c, currentUser));
+    }
+    if (currentUser.role === 'mahasiswa') {
+      const student = students.find((s) => s.nim === currentUser.nipOrNim || s.id === currentUser.studentId);
+      if (student && Array.isArray(student.courseIds) && student.courseIds.length > 0) {
+        return courses.filter((c) => student.courseIds.includes(c.id));
+      }
+      return courses.slice(0, 8);
+    }
+    return courses;
+  }, [courses, currentUser, students]);
+
+  const effectiveSchedules = useMemo(() => {
+    if (!currentUser || currentUser.role === 'admin') return schedules;
+    if (currentUser.role === 'dosen') {
+      return schedules.filter((s) => {
+        const matchCourse = effectiveCourses.some((c) => c.id === s.courseId || c.kode === s.kodeMK);
+        if (matchCourse) return true;
+        if (currentUser.dosenName && s.dosen.toLowerCase().includes(currentUser.dosenName.toLowerCase())) return true;
+        return false;
+      });
+    }
+    if (currentUser.role === 'mahasiswa') {
+      return schedules.filter((s) => effectiveCourses.some((c) => c.id === s.courseId || c.kode === s.kodeMK));
+    }
+    return schedules;
+  }, [schedules, currentUser, effectiveCourses]);
+
+  // Current active courses in semester
+  const semesterCourses = useMemo(() => {
+    if (!activeSemester || activeSemester === 'Semua Semester') return effectiveCourses;
+    return effectiveCourses.filter((c) => c.semester === activeSemester);
+  }, [effectiveCourses, activeSemester]);
+
+  // Current Course - adheres to selected semester and effective courses
+  const currentCourse = useMemo(() => {
+    const matching = effectiveCourses.find((c) => c.id === selectedCourseId);
+    if (matching && (!activeSemester || activeSemester === 'Semua Semester' || matching.semester === activeSemester)) {
+      return matching;
+    }
+    return semesterCourses[0] || (activeSemester === 'Semua Semester' ? effectiveCourses[0] : null);
+  }, [effectiveCourses, selectedCourseId, activeSemester, semesterCourses]);
 
   // Critical Attendance Warning Count for active course
   const currentCourseAttendance = currentCourse ? attendanceMap[currentCourse.id] || {} : {};
@@ -342,12 +509,38 @@ export default function App() {
     pushCurrentStateToSheets({ attendanceMap: updatedMap });
   };
 
-  // Handler for Meeting topic/date edit
-  const handleSaveMeeting = (updatedMeeting: MeetingInfo) => {
+  // Handler for changing active semester with automatic course selection
+  const handleSelectSemester = (newSemester: string) => {
+    setActiveSemester(newSemester);
+    const matchingCourses = newSemester === 'Semua Semester'
+      ? courses
+      : courses.filter((c) => c.semester === newSemester);
+
+    if (matchingCourses.length > 0) {
+      const isCurrentInSemester = matchingCourses.some((c) => c.id === selectedCourseId);
+      if (!isCurrentInSemester) {
+        setSelectedCourseId(matchingCourses[0].id);
+      }
+    }
+  };
+
+  // Save activeSemester to local storage
+  useEffect(() => {
+    localStorage.setItem('siakad_active_semester', activeSemester);
+  }, [activeSemester]);
+
+  // Handler for Meeting topic/date edit (supports single or auto-shifted batch)
+  const handleSaveMeeting = (updatedMeeting: MeetingInfo, updatedAllMeetings?: MeetingInfo[]) => {
     if (!currentCourse) return;
 
     const updatedCourses = courses.map((c) => {
       if (c.id !== currentCourse.id) return c;
+      if (updatedAllMeetings && updatedAllMeetings.length > 0) {
+        return {
+          ...c,
+          meetings: updatedAllMeetings,
+        };
+      }
       const updatedMeetings = c.meetings.map((m) =>
         m.meetingNumber === updatedMeeting.meetingNumber ? updatedMeeting : m
       );
@@ -359,6 +552,24 @@ export default function App() {
 
     setCourses(updatedCourses);
     pushCurrentStateToSheets({ courses: updatedCourses });
+    showSyncNotification('Topik & Tanggal Pertemuan berhasil diperbarui');
+  };
+
+  // Handler for batch updating all 14 meeting dates
+  const handleBatchUpdateMeetings = (updatedMeetings: MeetingInfo[]) => {
+    if (!currentCourse) return;
+
+    const updatedCourses = courses.map((c) => {
+      if (c.id !== currentCourse.id) return c;
+      return {
+        ...c,
+        meetings: updatedMeetings,
+      };
+    });
+
+    setCourses(updatedCourses);
+    pushCurrentStateToSheets({ courses: updatedCourses });
+    showSyncNotification('Jadwal 14 Pertemuan berhasil disinkronkan');
   };
 
   // Handler for Grades
@@ -415,16 +626,97 @@ export default function App() {
     };
     const updatedStudents = [...students, newStudent];
     setStudents(updatedStudents);
-    showSyncNotification('Menambahkan mahasiswa ke Google Sheets...', 'info');
+    showSyncNotification(`Mahasiswa ${newStudent.nama} berhasil ditambahkan!`, 'success');
     await pushCurrentStateToSheets({ students: updatedStudents });
   };
 
-  // Add new course (Immediately pushes to Google Sheets)
+  // Update existing student
+  const handleUpdateStudent = async (updatedStudent: Student) => {
+    const updatedStudents = students.map((s) => (s.id === updatedStudent.id ? updatedStudent : s));
+    setStudents(updatedStudents);
+    showSyncNotification(`Data mahasiswa ${updatedStudent.nama} berhasil diperbarui!`, 'success');
+    await pushCurrentStateToSheets({ students: updatedStudents });
+  };
+
+  // Delete student with all their attendance and grade records
+  const handleDeleteStudent = async (studentId: string) => {
+    const studentToDelete = students.find((s) => s.id === studentId);
+    const updatedStudents = students.filter((s) => s.id !== studentId);
+    setStudents(updatedStudents);
+
+    // Clean up attendance map
+    const updatedAttendanceMap = { ...attendanceMap };
+    Object.keys(updatedAttendanceMap).forEach((cId) => {
+      if (updatedAttendanceMap[cId] && updatedAttendanceMap[cId][studentId]) {
+        const copy = { ...updatedAttendanceMap[cId] };
+        delete copy[studentId];
+        updatedAttendanceMap[cId] = copy;
+      }
+    });
+    setAttendanceMap(updatedAttendanceMap);
+
+    // Clean up grades
+    const updatedGrades = { ...grades };
+    Object.keys(updatedGrades).forEach((cId) => {
+      if (updatedGrades[cId] && updatedGrades[cId][studentId]) {
+        const copy = { ...updatedGrades[cId] };
+        delete copy[studentId];
+        updatedGrades[cId] = copy;
+      }
+    });
+    setGrades(updatedGrades);
+
+    showSyncNotification(`Mahasiswa ${studentToDelete?.nama || ''} telah dihapus.`, 'info');
+    await pushCurrentStateToSheets({
+      students: updatedStudents,
+      attendanceMap: updatedAttendanceMap,
+      grades: updatedGrades,
+    });
+  };
+
+  const handleOpenEditStudent = (student: Student) => {
+    setStudentToEdit(student);
+    setShowAddStudentModal(true);
+  };
+
+  const handleOpenAddStudent = () => {
+    setStudentToEdit(null);
+    setShowAddStudentModal(true);
+  };
+
+  // Add new course (Automatically creates corresponding ScheduleItem and pushes to Google Sheets)
   const handleAddCourse = async (newCourse: Course) => {
     const updatedCourses = [...courses, newCourse];
     setCourses(updatedCourses);
     setSelectedCourseId(newCourse.id);
-    await pushCurrentStateToSheets({ courses: updatedCourses });
+
+    // Otomatis buat item jadwal kuliah mingguan untuk mata kuliah baru ini
+    const colorList = ['blue', 'emerald', 'purple', 'amber', 'indigo', 'rose', 'cyan'];
+    const randomColor = colorList[updatedCourses.length % colorList.length];
+    const newSchedule: ScheduleItem = {
+      id: `sch-${Date.now()}`,
+      courseId: newCourse.id,
+      namaMK: newCourse.nama,
+      kodeMK: newCourse.kode,
+      sks: newCourse.sks,
+      hari: (['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].includes(newCourse.jadwalHari) ? newCourse.jadwalHari : 'Senin') as any,
+      jamMulai: newCourse.jamMulai || '08:00',
+      jamSelesai: newCourse.jamSelesai || '10:30',
+      ruangan: newCourse.ruangan || 'Ruang Kuliah',
+      dosen: newCourse.dosenPengampu || 'Dosen Pengampu',
+      kelas: newCourse.kelas || 'Kelas A',
+      warna: randomColor,
+    };
+    const updatedSchedules = [...schedules, newSchedule];
+    setSchedules(updatedSchedules);
+
+    // Pastikan semester aktif sesuai jika mata kuliah baru didaftarkan pada semester tertentu
+    if (newCourse.semester && newCourse.semester !== activeSemester && activeSemester !== 'Semua Semester') {
+      setActiveSemester(newCourse.semester);
+    }
+
+    showSyncNotification(`Mata kuliah & jadwal ${newCourse.nama} berhasil ditambahkan!`, 'success');
+    await pushCurrentStateToSheets({ courses: updatedCourses, schedules: updatedSchedules });
   };
 
   // Add schedule (Immediately pushes to Google Sheets)
@@ -447,8 +739,9 @@ export default function App() {
   };
 
   // Pull Data from Google Sheets
-  const handlePullDataFromSheets = async (url: string) => {
-    const result = await fetchDataFromGoogleSheets(url);
+  const handlePullDataFromSheets = async (url?: string) => {
+    const targetUrl = url || googleConfig.webAppUrl || DEFAULT_GOOGLE_APPS_SCRIPT_URL;
+    const result = await fetchDataFromGoogleSheets(targetUrl);
     if (result.success && result.data) {
       setStudents(result.data.students || []);
       if (result.data.courses && result.data.courses.length > 0) {
@@ -458,15 +751,19 @@ export default function App() {
       setAttendanceMap(result.data.attendanceMap || {});
       setGrades(result.data.grades || {});
       setSchedules(result.data.schedules || []);
+      if (result.data.users && result.data.users.length > 0) {
+        setUserAccounts(result.data.users);
+      }
       const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
       setGoogleConfig((prev) => ({
         ...prev,
-        webAppUrl: url,
+        webAppUrl: targetUrl,
         status: 'success',
         lastSyncedAt: timeStr,
         errorMessage: undefined,
       }));
-      showSyncNotification('Data berhasil diperbarui dari Google Sheets!', 'success');
+      showSyncNotification('Data & Akun Pengguna berhasil disinkronkan dari Google Sheets!', 'success');
+      return true;
     } else {
       throw new Error(result.message);
     }
@@ -564,9 +861,38 @@ export default function App() {
     if (imported.schedules) setSchedules(imported.schedules);
   };
 
-  if (!currentCourse) {
-    return <div className="p-8 text-center">Memuat aplikasi perkuliahan...</div>;
-  }
+  // When currentUser changes or is a lecturer, automatically update selectedCourseId to the lecturer's taught course
+  useEffect(() => {
+    if (currentUser?.role === 'dosen') {
+      const lecturerCourses = courses.filter((c) => isCourseTaughtByDosen(c, currentUser));
+      if (lecturerCourses.length > 0 && !lecturerCourses.some((c) => c.id === selectedCourseId)) {
+        setSelectedCourseId(lecturerCourses[0].id);
+      }
+    }
+  }, [currentUser, courses, selectedCourseId]);
+
+  const handleLogin = (user: AuthUser) => {
+    setCurrentUser(user);
+    setShowLoginModal(false);
+    
+    if (user.role === 'dosen') {
+      const lecturerCourses = courses.filter((c) => isCourseTaughtByDosen(c, user));
+      if (lecturerCourses.length > 0) {
+        setSelectedCourseId(lecturerCourses[0].id);
+        if (lecturerCourses[0].semester && activeSemester !== 'Semua Semester') {
+          setActiveSemester(lecturerCourses[0].semester);
+        }
+      }
+    }
+
+    showSyncNotification(`Berhasil login sebagai ${user.nama} (${user.role.toUpperCase()})`, 'success');
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setShowLoginModal(true);
+    showSyncNotification('Anda telah keluar dari sistem.', 'info');
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-blue-500 selection:text-white relative">
@@ -594,9 +920,7 @@ export default function App() {
 
       {/* Top Navigation */}
       <Navbar
-        courses={courses}
-        selectedCourseId={selectedCourseId}
-        onSelectCourse={setSelectedCourseId}
+        currentUser={currentUser}
         activeTab={activeTab}
         setActiveTab={(tab) => {
           if (tab === 'report') {
@@ -606,104 +930,222 @@ export default function App() {
           }
         }}
         warningCount={warningCount}
-        onOpenAddCourse={() => setShowAddCourseModal(true)}
-        onOpenAddStudent={() => setShowAddStudentModal(true)}
         onOpenResetData={() => setShowResetModal(true)}
         isSyncing={isSyncing}
         onQuickSync={handleQuickSync}
         googleSheetConnected={googleConfig.status === 'success'}
+        onOpenSearchModal={() => setShowSearchModal(true)}
+        onOpenLoginModal={() => setShowLoginModal(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main App Content Viewport */}
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex-1">
-        {activeTab === 'dashboard' && (
-          <DashboardTab
-            course={currentCourse}
-            students={students}
-            attendanceMap={attendanceMap}
-            grades={grades}
-            schedules={schedules}
-            onNavigateTab={(tab) => {
-              if (tab === 'report') setShowReportModal(true);
-              else setActiveTab(tab);
-            }}
-          />
-        )}
-
-        {activeTab === 'attendance' && (
-          <AttendanceTab
-            course={currentCourse}
-            students={students}
-            attendanceMap={attendanceMap}
-            onUpdateAttendance={handleUpdateAttendance}
-            onBulkUpdateAttendance={handleBulkUpdateAttendance}
-            onEditMeeting={(m) => setEditingMeeting(m)}
-            onOpenAddStudent={() => setShowAddStudentModal(true)}
-          />
-        )}
-
-        {activeTab === 'grades' && (
-          <GradesTab
-            course={currentCourse}
-            students={students}
-            attendanceMap={attendanceMap}
-            grades={grades}
-            onUpdateGrade={handleUpdateGrade}
-            onUpdateWeights={handleUpdateWeights}
-            onOpenReportModal={() => setShowReportModal(true)}
-          />
-        )}
-
-        {activeTab === 'schedule' && (
-          <ScheduleTab
-            schedules={schedules}
-            courses={courses}
-            onAddSchedule={handleAddSchedule}
-            onDeleteSchedule={handleDeleteSchedule}
-            onSelectCourse={setSelectedCourseId}
-            onNavigateTab={(tab) => setActiveTab(tab)}
-          />
-        )}
-
-        {activeTab === 'warning' && (
-          <WarningSystemTab
-            course={currentCourse}
-            students={students}
-            attendanceMap={attendanceMap}
-            onUpdateMinAttendance={handleUpdateMinAttendance}
-            onOpenReportModal={() => setShowReportModal(true)}
-          />
-        )}
-
-        {activeTab === 'googlesheets' && (
-          <GoogleSheetIntegrationTab
-            config={googleConfig}
-            onUpdateConfig={(updated) => setGoogleConfig((prev) => ({ ...prev, ...updated }))}
+        {currentUser?.role === 'mahasiswa' ? (
+          <StudentPortalView
+            currentUser={currentUser}
             students={students}
             courses={courses}
             attendanceMap={attendanceMap}
             grades={grades}
             schedules={schedules}
-            onImportData={handleImportBackupData}
-            onPullDataFromSheets={handlePullDataFromSheets}
+            activeSemester={activeSemester}
           />
+        ) : (
+          <>
+            {/* Dosen Banner Notice if logged in as Lecturer */}
+            {currentUser?.role === 'dosen' && (
+              <div className="mb-6 p-4 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold shrink-0 shadow-md shadow-amber-600/20">
+                    <GraduationCap className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-amber-950 text-sm">
+                      Portal Dosen: {currentUser.nama}
+                    </h3>
+                    <p className="text-amber-900/80 mt-0.5">
+                      Menampilkan {effectiveCourses.length} mata kuliah & kelas yang Anda ampu pada {activeSemester}.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-amber-100 text-amber-900 border border-amber-300 font-mono font-semibold px-2.5 py-1 rounded-lg">
+                    NIP: {currentUser.nipOrNim || '196808201994031002'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'dashboard' && (
+              <DashboardTab
+                course={currentCourse}
+                courses={effectiveCourses}
+                students={students}
+                attendanceMap={attendanceMap}
+                grades={grades}
+                schedules={effectiveSchedules}
+                activeSemester={activeSemester}
+                onSelectSemester={handleSelectSemester}
+                onSelectCourse={setSelectedCourseId}
+                onNavigateTab={(tab) => {
+                  if (tab === 'report') setShowReportModal(true);
+                  else setActiveTab(tab);
+                }}
+                onOpenAddCourse={() => setShowAddCourseModal(true)}
+                onOpenAddStudent={handleOpenAddStudent}
+                onEditStudent={handleOpenEditStudent}
+                pinnedCourseIds={pinnedCourseIds}
+                onTogglePinCourse={handleTogglePinCourse}
+                onOpenSearchModal={() => setShowSearchModal(true)}
+              />
+            )}
+
+            {activeTab === 'attendance' && (
+              <AttendanceTab
+                course={currentCourse}
+                courses={effectiveCourses}
+                onSelectCourse={setSelectedCourseId}
+                activeSemester={activeSemester}
+                onOpenAddCourse={() => setShowAddCourseModal(true)}
+                students={students}
+                attendanceMap={attendanceMap}
+                onUpdateAttendance={handleUpdateAttendance}
+                onBulkUpdateAttendance={handleBulkUpdateAttendance}
+                onEditMeeting={(m) => setEditingMeeting(m)}
+                onOpenAddStudent={handleOpenAddStudent}
+                onEditStudent={handleOpenEditStudent}
+                onBatchUpdateMeetings={handleBatchUpdateMeetings}
+                pinnedCourseIds={pinnedCourseIds}
+                onTogglePinCourse={handleTogglePinCourse}
+                onOpenSearchModal={() => setShowSearchModal(true)}
+              />
+            )}
+
+            {activeTab === 'grades' && (
+              <GradesTab
+                course={currentCourse}
+                courses={effectiveCourses}
+                onSelectCourse={setSelectedCourseId}
+                activeSemester={activeSemester}
+                onOpenAddCourse={() => setShowAddCourseModal(true)}
+                onOpenAddStudent={handleOpenAddStudent}
+                onEditStudent={handleOpenEditStudent}
+                students={students}
+                attendanceMap={attendanceMap}
+                grades={grades}
+                onUpdateGrade={handleUpdateGrade}
+                onUpdateWeights={handleUpdateWeights}
+                onOpenReportModal={() => setShowReportModal(true)}
+                pinnedCourseIds={pinnedCourseIds}
+                onTogglePinCourse={handleTogglePinCourse}
+                onOpenSearchModal={() => setShowSearchModal(true)}
+              />
+            )}
+
+            {activeTab === 'schedule' && (
+              <ScheduleTab
+                schedules={effectiveSchedules}
+                courses={effectiveCourses}
+                activeSemester={activeSemester}
+                onAddSchedule={handleAddSchedule}
+                onDeleteSchedule={handleDeleteSchedule}
+                onSelectCourse={setSelectedCourseId}
+                onNavigateTab={(tab) => setActiveTab(tab)}
+                onOpenAddCourse={() => setShowAddCourseModal(true)}
+              />
+            )}
+
+            {activeTab === 'warning' && (
+              <WarningSystemTab
+                course={currentCourse}
+                courses={effectiveCourses}
+                onSelectCourse={setSelectedCourseId}
+                activeSemester={activeSemester}
+                onOpenAddCourse={() => setShowAddCourseModal(true)}
+                onEditStudent={handleOpenEditStudent}
+                students={students}
+                attendanceMap={attendanceMap}
+                onUpdateMinAttendance={handleUpdateMinAttendance}
+                onOpenReportModal={() => setShowReportModal(true)}
+              />
+            )}
+
+            {activeTab === 'googlesheets' && currentUser?.role === 'admin' && (
+              <GoogleSheetIntegrationTab
+                config={googleConfig}
+                onUpdateConfig={(updated) => setGoogleConfig((prev) => ({ ...prev, ...updated }))}
+                students={students}
+                courses={courses}
+                attendanceMap={attendanceMap}
+                grades={grades}
+                schedules={schedules}
+                userAccounts={userAccounts}
+                onImportData={handleImportBackupData}
+                onPullDataFromSheets={handlePullDataFromSheets}
+              />
+            )}
+          </>
         )}
       </main>
 
       {/* Global Modals */}
-      <ReportExportModal
-        isOpen={showReportModal}
-        onClose={() => setShowReportModal(false)}
-        course={currentCourse}
+      {/* Multi-Login Modal with full Google Sheets & Database Auth */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onLogin={handleLogin}
+        onClose={() => setShowLoginModal(false)}
+        courses={courses}
+        students={students}
+        userAccounts={userAccounts}
+        googleConfig={googleConfig}
+        onSyncFromGoogleSheets={handlePullDataFromSheets}
+      />
+
+      {/* 400+ Course Quick Command Palette Modal */}
+      <CourseSearchCommandModal
+        isOpen={showSearchModal}
+        onClose={() => setShowSearchModal(false)}
+        courses={effectiveCourses}
+        activeCourse={currentCourse}
         students={students}
         attendanceMap={attendanceMap}
-        grades={grades}
+        pinnedCourseIds={pinnedCourseIds}
+        onTogglePin={handleTogglePinCourse}
+        onSelectCourse={(courseId) => {
+          setSelectedCourseId(courseId);
+          const found = courses.find((c) => c.id === courseId);
+          if (found && found.semester && activeSemester !== 'Semua Semester' && found.semester !== activeSemester) {
+            setActiveSemester(found.semester);
+          }
+        }}
+        onOpenAddCourse={() => setShowAddCourseModal(true)}
       />
+      {showReportModal && currentCourse && (
+        <ReportExportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          course={currentCourse}
+          students={students}
+          attendanceMap={attendanceMap}
+          grades={grades}
+          activeSemester={activeSemester}
+        />
+      )}
 
       <StudentModal
         isOpen={showAddStudentModal}
-        onClose={() => setShowAddStudentModal(false)}
+        onClose={() => {
+          setShowAddStudentModal(false);
+          setStudentToEdit(null);
+        }}
         onAddStudent={handleAddStudent}
+        onUpdateStudent={handleUpdateStudent}
+        onDeleteStudent={handleDeleteStudent}
+        studentToEdit={studentToEdit}
+        courses={courses}
+        activeCourseId={currentCourse?.id}
+        activeSemester={activeSemester}
       />
 
       <CourseModal
@@ -712,12 +1154,15 @@ export default function App() {
         onAddCourse={handleAddCourse}
       />
 
-      <MeetingEditModal
-        isOpen={!!editingMeeting}
-        meeting={editingMeeting}
-        onClose={() => setEditingMeeting(null)}
-        onSave={handleSaveMeeting}
-      />
+      {editingMeeting && currentCourse && (
+        <MeetingEditModal
+          isOpen={!!editingMeeting}
+          meeting={editingMeeting}
+          allMeetings={currentCourse.meetings || []}
+          onClose={() => setEditingMeeting(null)}
+          onSave={handleSaveMeeting}
+        />
+      )}
 
       <ResetDataModal
         isOpen={showResetModal}

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Course, Student, StudentAttendanceMap } from '../types';
-import { calculateAttendanceSummary, generateWarningWhatsAppMessage } from '../utils/calculations';
+import { calculateAttendanceSummary, generateWarningWhatsAppMessage, getCourseStudents } from '../utils/calculations';
 import { 
   AlertTriangle, 
   Send, 
@@ -14,11 +14,19 @@ import {
   ExternalLink,
   MessageSquare,
   Printer,
-  Sparkles
+  Sparkles,
+  BookOpen,
+  Plus,
+  Edit3
 } from 'lucide-react';
 
 interface WarningSystemTabProps {
-  course: Course;
+  course?: Course | null;
+  courses?: Course[];
+  onSelectCourse?: (courseId: string) => void;
+  activeSemester?: string;
+  onOpenAddCourse?: () => void;
+  onEditStudent?: (student: Student) => void;
   students: Student[];
   attendanceMap: StudentAttendanceMap;
   onUpdateMinAttendance: (minPercent: number) => void;
@@ -27,6 +35,11 @@ interface WarningSystemTabProps {
 
 export const WarningSystemTab: React.FC<WarningSystemTabProps> = ({
   course,
+  courses,
+  onSelectCourse,
+  activeSemester,
+  onOpenAddCourse,
+  onEditStudent,
   students,
   attendanceMap,
   onUpdateMinAttendance,
@@ -35,15 +48,55 @@ export const WarningSystemTab: React.FC<WarningSystemTabProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedStudentForLetter, setSelectedStudentForLetter] = useState<Student | null>(null);
 
-  const courseAttendance = attendanceMap[course.id] || {};
+  const semesterCourses = useMemo(() => {
+    if (!courses || courses.length === 0) return course ? [course] : [];
+    if (!activeSemester || activeSemester === 'Semua Semester') return courses;
+    return courses.filter((c) => c.semester === activeSemester);
+  }, [courses, activeSemester, course]);
 
-  const summaries = students.map((std) => 
-    calculateAttendanceSummary(std, course, courseAttendance[std.id])
-  );
+  const courseAttendance = attendanceMap[course?.id || ''] || {};
+
+  // Filter students based on active course & semester
+  const courseStudents = useMemo(() => {
+    if (!course) return [];
+    return getCourseStudents(students, course, activeSemester);
+  }, [students, course, activeSemester]);
+
+  const summaries = useMemo(() => {
+    if (!course) return [];
+    return courseStudents.map((std) => 
+      calculateAttendanceSummary(std, course, courseAttendance[std.id])
+    );
+  }, [courseStudents, course, courseAttendance]);
 
   const criticalList = summaries.filter((s) => s.status === 'critical');
   const warningList = summaries.filter((s) => s.status === 'warning');
   const safeList = summaries.filter((s) => s.status === 'safe');
+
+  if (!course || semesterCourses.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-10 border border-slate-200 shadow-sm text-center my-6">
+        <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-200">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 mb-1">
+          Data Peringatan Absensi Belum Tersedia ({activeSemester || 'Semester Ini'})
+        </h3>
+        <p className="text-sm text-slate-500 max-w-md mx-auto mb-6">
+          Belum ada data mata kuliah atau mahasiswa pada semester yang dipilih ({activeSemester}). Sistem peringatan dini kehadiran akan otomatis aktif saat mata kuliah dan data absensi tersedia.
+        </p>
+        {onOpenAddCourse && (
+          <button
+            onClick={onOpenAddCourse}
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Mata Kuliah</span>
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const handleCopyWAMessage = (student: Student, summary: any) => {
     const isCritical = summary.status === 'critical';
@@ -76,6 +129,63 @@ _SIAKAD Rekap Perkuliahan & Absensi Mahasiswa_`;
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Course Switcher Pills */}
+      {courses && courses.length > 0 && onSelectCourse && (
+        <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+              <span>Ganti Mata Kuliah ({activeSemester || course.semester}):</span>
+            </span>
+            <div className="flex items-center gap-3 text-[11px] text-slate-500">
+              <span>{course.dosenPengampu}</span>
+              <span>•</span>
+              <span>Batas Min: {course.minAttendancePercent}%</span>
+              <span>•</span>
+              <span>{course.ruangan}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {(activeSemester && activeSemester !== 'Semua Semester'
+              ? courses.filter(c => c.semester === activeSemester)
+              : courses
+            ).map((c) => {
+              const isSelected = c.id === course.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => onSelectCourse(c.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-2 shadow-2xs ${
+                    isSelected
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-200/80 border border-slate-200'
+                  }`}
+                >
+                  <span className="font-mono text-[11px] opacity-90">{c.kode}</span>
+                  <span className="truncate max-w-[170px]">{c.nama}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-normal ${
+                    isSelected ? 'bg-blue-700/60 text-blue-100' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {c.kelas}
+                  </span>
+                  {isSelected && <Check className="w-3 h-3 text-white ml-0.5" />}
+                </button>
+              );
+            })}
+
+            {onOpenAddCourse && (
+              <button
+                onClick={onOpenAddCourse}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-dashed border-blue-300 transition flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5 text-blue-600" />
+                <span>Tambah MK</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Top Banner Alert */}
       <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-rose-950 rounded-2xl p-6 text-white border border-rose-800/40 shadow-lg relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
@@ -221,6 +331,17 @@ _SIAKAD Rekap Perkuliahan & Absensi Mahasiswa_`;
 
                   {/* Actions */}
                   <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
+                    {onEditStudent && (
+                      <button
+                        onClick={() => onEditStudent(cs.student)}
+                        className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs px-3 py-2 rounded-xl transition border border-slate-200 font-medium shadow-2xs"
+                        title="Edit data mahasiswa"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Edit Data</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleCopyWAMessage(cs.student, cs)}
                       className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3 py-2 rounded-xl transition border border-slate-200 font-medium"
@@ -327,6 +448,17 @@ _SIAKAD Rekap Perkuliahan & Absensi Mahasiswa_`;
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-center">
+                    {onEditStudent && (
+                      <button
+                        onClick={() => onEditStudent(ws.student)}
+                        className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs px-3 py-2 rounded-xl transition border border-slate-200 font-medium shadow-2xs"
+                        title="Edit data mahasiswa"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Edit Data</span>
+                      </button>
+                    )}
+
                     <a
                       href={waUrl}
                       target="_blank"
@@ -366,7 +498,7 @@ _SIAKAD Rekap Perkuliahan & Absensi Mahasiswa_`;
               {/* Header Letterhead */}
               <div className="text-center border-b-2 border-slate-900 pb-3">
                 <h2 className="font-bold text-sm uppercase tracking-wider">KEMENTERIAN PENDIDIKAN TINGGI, SAINS DAN TEKNOLOGI</h2>
-                <h1 className="font-extrabold text-base uppercase">UNIVERSITAS NEGERI INDONESIA</h1>
+                <h1 className="font-extrabold text-base uppercase">UNIVERSITAS ANDALAS</h1>
                 <p className="text-[11px] font-sans text-slate-600">FAKULTAS HUKUM • PROGRAM STUDI S1 ILMU HUKUM</p>
                 <p className="text-[10px] font-sans text-slate-500">Kampus Limau Manis, Padang 25163 • Laman: https://unand.ac.id</p>
               </div>
@@ -414,11 +546,11 @@ _SIAKAD Rekap Perkuliahan & Absensi Mahasiswa_`;
               {/* Signature Block */}
               <div className="pt-4 flex justify-between font-sans text-xs">
                 <div>
-                  <p>Mengetahui,</p>
-                  <p className="font-semibold">Ketua Program Studi</p>
+                  <p></p>
+                  <p className="font-semibold"></p>
                   <div className="h-14" />
-                  <p className="font-bold underline">Dr. Kurnia Warman, S.H., M.Hum.</p>
-                  <p className="text-[10px] text-slate-500 font-mono">NIP. 197205151998021001</p>
+                  <p className="font-bold underline"></p>
+                  <p className="text-[10px] text-slate-500 font-mono"></p>
                 </div>
 
                 <div className="text-right">
